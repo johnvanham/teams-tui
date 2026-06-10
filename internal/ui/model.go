@@ -127,13 +127,10 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 	// header is drawn separately in the sidebar chrome.
 	l.SetShowTitle(false)
 
-	// Contacts list shares the same delegate/geometry as the chat list so the
-	// sidebar can swap between them without a layout change. Filtering doubles
-	// as a "search people" box.
-	contactDelegate := list.NewDefaultDelegate()
-	contactDelegate.SetHeight(2)
-	contactDelegate.SetSpacing(1)
-	cl := list.New(nil, contactDelegate, 0, 0)
+	// Contacts list shares the chat list's geometry so the sidebar can swap
+	// between them without a layout change, but uses a delegate that colours
+	// each contact's presence glyph. Filtering doubles as a "search people" box.
+	cl := list.New(nil, newContactDelegate(), 0, 0)
 	cl.Title = "Contacts"
 	cl.SetShowHelp(false)
 	cl.SetShowStatusBar(false)

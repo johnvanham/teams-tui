@@ -338,22 +338,12 @@ func (m Model) participantsHeader() string {
 func (m Model) presenceGlyph(userID string, bg color.Color) string {
 	p, ok := m.presences[userID]
 	glyph := "○"
-	color := styles.LightGrey
+	fg := styles.LightGrey
 	if ok {
 		glyph = p.Glyph()
-		switch p.Availability {
-		case "Available", "AvailableIdle":
-			color = styles.Green
-		case "Busy", "BusyIdle", "InACall", "InAConferenceCall", "InAMeeting", "Presenting",
-			"DoNotDisturb", "Focusing":
-			color = styles.Red
-		case "Away", "BeRightBack", "OutOfOffice":
-			color = styles.Yellow
-		default:
-			color = styles.LightGrey
-		}
+		fg = presenceColor(p.Availability)
 	}
-	return lipgloss.NewStyle().Background(bg).Foreground(color).Render(glyph)
+	return lipgloss.NewStyle().Background(bg).Foreground(fg).Render(glyph)
 }
 
 // viewStatusPicker renders the status-selection popup centered on screen.

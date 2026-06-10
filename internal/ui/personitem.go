@@ -14,8 +14,8 @@ type personItem struct {
 }
 
 // Title implements list.DefaultItem. A presence glyph prefixes the name so the
-// contact's availability is visible at a glance (the glyph is colored by the
-// delegate's normal text style; the textual label lives in Description()).
+// contact's availability is visible at a glance; contactDelegate recolours that
+// glyph by availability, and the textual label lives in Description().
 func (i personItem) Title() string {
 	name := i.person.DisplayName
 	if name == "" {
