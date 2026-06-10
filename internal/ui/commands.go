@@ -57,6 +57,12 @@ type messagesErrMsg struct {
 // sentMsg signals a message was sent successfully to a chat.
 type sentMsg struct{ chatID string }
 
+// editedMsg signals a message was edited successfully so the chat can refresh.
+type editedMsg struct {
+	chatID string
+	err    error
+}
+
 // peopleMsg carries the loaded contacts (people) for the sidebar's contacts
 // mode. err is set when the lookup failed (e.g. People.Read unconsented).
 type peopleMsg struct {
@@ -286,6 +292,16 @@ func openImageCmd(ctx context.Context, c *graph.Client, img graph.ImageRef) tea.
 			return imageOpenedMsg{name: name, err: err}
 		}
 		return imageOpenedMsg{name: name}
+	}
+}
+
+// editMessageCmd edits an existing chat message in place (PATCH).
+func editMessageCmd(ctx context.Context, c *graph.Client, chatID, messageID, text string) tea.Cmd {
+	return func() tea.Msg {
+		if _, err := c.EditMessage(ctx, chatID, messageID, text); err != nil {
+			return editedMsg{chatID: chatID, err: err}
+		}
+		return editedMsg{chatID: chatID}
 	}
 }
 

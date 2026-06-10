@@ -91,6 +91,7 @@ type Model struct {
 	chatsSig     string                    // signature of the rendered chat list
 	convImages   []graph.ImageRef          // images in the open chat, display order
 	openingImage bool                      // an image download/open is in flight
+	editingMsgID string                    // message ID being edited ("" if composing new)
 	focused      bool                      // terminal window has focus
 	myPresence     *graph.Presence           // signed-in user's own presence
 	sessionID      string                    // app presence session ID (client ID)

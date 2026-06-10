@@ -369,10 +369,16 @@ func (m Model) statusLine() string {
 	switch m.focus {
 	case focusChats:
 		left = "CHATS"
+		if m.sidebarMode == sidebarContacts {
+			left = "CONTACTS"
+		}
 	case focusMessages:
 		left = "MESSAGES"
 	case focusCompose:
 		left = "COMPOSE"
+	}
+	if m.editingMsgID != "" {
+		left = "EDITING (enter to save · esc to cancel)"
 	}
 	if m.errText != "" {
 		return styles.ErrorBanner.Width(m.width).Render(left + " · " + m.errText)

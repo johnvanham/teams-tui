@@ -132,6 +132,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case editedMsg:
+		if msg.err != nil {
+			m.errText = "Couldn't edit message: " + msg.err.Error()
+			return m, nil
+		}
+		// Refresh the chat so the edited text (and Teams' "Edited" marker) show.
+		return m, loadMessagesCmd(m.ctx, m.client, msg.chatID)
+
 	case meetingsMsg:
 		return m.handleMeetings(msg)
 
@@ -380,6 +388,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.viewImage()
 	}
 
+	// Edit: load the user's most recent message into the compose box for an
+	// in-place edit. Available from any pane.
+	if key.Matches(msg, m.keys.Edit) {
+		return m.startEdit()
+	}
+
 	switch {
 	case key.Matches(msg, m.keys.NextPane):
 		m.cycleFocus(1)
@@ -410,6 +424,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// Compose-specific: Enter sends, alt+enter inserts a newline.
 	if m.focus == focusCompose {
+		// Esc cancels an in-progress edit, restoring the compose box to a
+		// fresh (new-message) state.
+		if m.editingMsgID != "" && msg.String() == "esc" {
+			m.cancelEdit()
+			return m, nil
+		}
 		if key.Matches(msg, m.keys.Send) {
 			return m.trySend()
 		}
@@ -956,9 +976,66 @@ func (m Model) trySend() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	chatID := m.currentChat
+	// If we're editing an existing message, PATCH it instead of posting a new
+	// one, then leave edit mode.
+	if m.editingMsgID != "" {
+		msgID := m.editingMsgID
+		m.editingMsgID = ""
+		m.compose.Reset()
+		m.layout()
+		return m, editMessageCmd(m.ctx, m.client, chatID, msgID, text)
+	}
 	m.compose.Reset()
 	m.layout() // shrink the compose box back immediately
 	return m, sendMessageCmd(m.ctx, m.client, chatID, text)
+}
+
+// startEdit loads the signed-in user's most recent (non-deleted) message in the
+// current chat into the compose box for an in-place edit. The message's
+// plaintext becomes the editable buffer; Enter commits the edit, Esc cancels.
+func (m Model) startEdit() (tea.Model, tea.Cmd) {
+	if m.currentChat == "" || m.me == nil {
+		return m, nil
+	}
+	msg, ok := m.latestOwnMessage(m.currentChat)
+	if !ok {
+		m.errText = "No message of yours to edit in this chat."
+		return m, nil
+	}
+	m.editingMsgID = msg.ID
+	m.sidebarMode = sidebarChats
+	m.focus = focusCompose
+	m.compose.SetValue(msg.Body.PlainText())
+	m.layout()
+	return m, m.compose.Focus()
+}
+
+// cancelEdit leaves edit mode and clears the compose box.
+func (m *Model) cancelEdit() {
+	m.editingMsgID = ""
+	m.compose.Reset()
+	m.layout()
+}
+
+// latestOwnMessage returns the signed-in user's most recent non-deleted message
+// in a chat (by creation time), if any.
+func (m Model) latestOwnMessage(chatID string) (graph.Message, bool) {
+	msgs := m.messages[chatID]
+	var best graph.Message
+	found := false
+	for _, msg := range msgs {
+		if msg.DeletedAt != nil {
+			continue
+		}
+		if msg.From == nil || msg.From.User == nil || msg.From.User.ID != m.me.ID {
+			continue
+		}
+		if !found || msg.CreatedAt.After(best.CreatedAt) {
+			best = msg
+			found = true
+		}
+	}
+	return best, found
 }
 
 func (m Model) refreshCmd() tea.Cmd {
