@@ -55,6 +55,19 @@ type messagesErrMsg struct {
 // sentMsg signals a message was sent successfully to a chat.
 type sentMsg struct{ chatID string }
 
+// peopleMsg carries the loaded contacts (people) for the sidebar's contacts
+// mode. err is set when the lookup failed (e.g. People.Read unconsented).
+type peopleMsg struct {
+	people []graph.Person
+	err    error
+}
+
+// chatCreatedMsg signals a new 1:1 chat was created so it can be opened.
+type chatCreatedMsg struct {
+	chat *graph.Chat
+	err  error
+}
+
 // meetingsMsg carries upcoming events for notification checks.
 type meetingsMsg struct{ events []graph.Event }
 
@@ -205,6 +218,30 @@ func sendMessageCmd(ctx context.Context, c *graph.Client, chatID, text string) t
 			return errMsg{err}
 		}
 		return sentMsg{chatID: chatID}
+	}
+}
+
+// loadPeopleCmd fetches the user's contacts, optionally filtered by a search
+// string, for the sidebar's contacts mode.
+func loadPeopleCmd(ctx context.Context, c *graph.Client, search string) tea.Cmd {
+	return func() tea.Msg {
+		people, err := c.ListPeople(ctx, search)
+		if err != nil {
+			return peopleMsg{err: err}
+		}
+		return peopleMsg{people: people}
+	}
+}
+
+// createChatCmd starts (or reuses) a 1:1 chat with the given user and reports
+// the resulting chat so it can be opened.
+func createChatCmd(ctx context.Context, c *graph.Client, myUserID, otherUserID string) tea.Cmd {
+	return func() tea.Msg {
+		chat, err := c.CreateOneOnOneChat(ctx, myUserID, otherUserID)
+		if err != nil {
+			return chatCreatedMsg{err: err}
+		}
+		return chatCreatedMsg{chat: chat}
 	}
 }
 

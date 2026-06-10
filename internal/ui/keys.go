@@ -11,6 +11,9 @@ type keyMap struct {
 	Refresh  key.Binding
 	Newline  key.Binding
 	Status   key.Binding
+	Contacts key.Binding
+	Edit     key.Binding
+	Image    key.Binding
 	Help     key.Binding
 	Quit     key.Binding
 	Up       key.Binding
@@ -43,6 +46,18 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("ctrl+s"),
 			key.WithHelp("ctrl+s", "status"),
 		),
+		Contacts: key.NewBinding(
+			key.WithKeys("ctrl+o"),
+			key.WithHelp("ctrl+o", "contacts/new chat"),
+		),
+		Edit: key.NewBinding(
+			key.WithKeys("ctrl+e"),
+			key.WithHelp("ctrl+e", "edit last message"),
+		),
+		Image: key.NewBinding(
+			key.WithKeys("ctrl+v"),
+			key.WithHelp("ctrl+v", "view image"),
+		),
 		Up: key.NewBinding(
 			key.WithKeys("up", "k"),
 			key.WithHelp("↑/k", "up"),
@@ -64,14 +79,15 @@ func defaultKeyMap() keyMap {
 
 // ShortHelp implements help.KeyMap.
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.NextPane, k.Send, k.Status, k.Help, k.Quit}
+	return []key.Binding{k.NextPane, k.Send, k.Contacts, k.Status, k.Help, k.Quit}
 }
 
 // FullHelp implements help.KeyMap.
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.NextPane, k.PrevPane},
-		{k.Send, k.Newline, k.Refresh},
-		{k.Status, k.Help, k.Quit},
+		{k.Send, k.Newline, k.Edit, k.Image},
+		{k.Contacts, k.Status, k.Refresh},
+		{k.Help, k.Quit},
 	}
 }

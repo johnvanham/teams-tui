@@ -119,6 +119,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Immediately refresh the affected chat for snappy feedback.
 		return m, loadMessagesCmd(m.ctx, m.client, msg.chatID)
 
+	case peopleMsg:
+		return m.handlePeople(msg)
+
+	case chatCreatedMsg:
+		return m.handleChatCreated(msg)
+
 	case meetingsMsg:
 		return m.handleMeetings(msg)
 
@@ -327,6 +333,18 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Toggle the sidebar between chats and contacts. Switching to contacts
+	// moves focus there and lazily loads the people list on first use.
+	if key.Matches(msg, m.keys.Contacts) {
+		return m.toggleContacts()
+	}
+
+	// Contacts mode: the sidebar shows the people list. Route input to it,
+	// with Enter starting a 1:1 chat with the selected person.
+	if m.sidebarMode == sidebarContacts && m.focus == focusChats {
+		return m.handleContactsKey(msg)
+	}
+
 	// If actively typing a filter, let the list consume keys (so Enter/Esc and
 	// characters edit the filter rather than triggering global actions).
 	if m.focus == focusChats && m.list.FilterState() == list.Filtering {
@@ -494,6 +512,45 @@ func (m Model) handleChats(msg chatsMsg) (tea.Model, tea.Cmd) {
 	// Refresh presence for whoever is in the (now-)current chat.
 	presCmd := loadPresencesCmd(m.ctx, m.client, m.currentChatParticipantIDs())
 	return m, tea.Batch(cmd, openCmd, presCmd)
+}
+
+// handlePeople populates the contacts list from a people lookup. A failure
+// (e.g. People.Read not consented) surfaces as a transient status notice
+// rather than tearing down the UI.
+func (m Model) handlePeople(msg peopleMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.errText = "Couldn't load contacts: " + msg.err.Error()
+		return m, nil
+	}
+	items := make([]list.Item, 0, len(msg.people))
+	for _, p := range msg.people {
+		items = append(items, personItem{person: p})
+	}
+	return m, m.contacts.SetItems(items)
+}
+
+// handleChatCreated opens a freshly created 1:1 chat: it switches the sidebar
+// back to chats, refreshes the chat list so the new chat appears, and opens it.
+func (m Model) handleChatCreated(msg chatCreatedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.errText = "Couldn't start chat: " + msg.err.Error()
+		return m, nil
+	}
+	if msg.chat == nil || msg.chat.ID == "" {
+		return m, nil
+	}
+	// Cache the chat so currentChatParticipantIDs/header lookups work even
+	// before the next chat-list refresh lands.
+	sortMembers(msg.chat.Members)
+	m.chats[msg.chat.ID] = *msg.chat
+	m.sidebarMode = sidebarChats
+	m.focus = focusCompose
+	openCmd := m.openChat(msg.chat.ID)
+	return m, tea.Batch(
+		loadChatsCmd(m.ctx, m.client), // surface the new chat in the sidebar
+		openCmd,
+		m.compose.Focus(),
+	)
 }
 
 func (m Model) handleMessages(msg messagesMsg) (tea.Model, tea.Cmd) {
@@ -793,6 +850,61 @@ func isReservedListKey(msg tea.KeyPressMsg) bool {
 		return true
 	}
 	return false
+}
+
+// toggleContacts flips the sidebar between the chat list and the contacts
+// (people) list. Entering contacts mode focuses the sidebar and triggers a
+// one-time people load; leaving it returns focus to the chats.
+func (m Model) toggleContacts() (tea.Model, tea.Cmd) {
+	if m.sidebarMode == sidebarContacts {
+		m.sidebarMode = sidebarChats
+		m.focus = focusChats
+		m.compose.Blur()
+		return m, nil
+	}
+	m.sidebarMode = sidebarContacts
+	m.focus = focusChats
+	m.compose.Blur()
+	var cmd tea.Cmd
+	if !m.contactsLoaded && m.client != nil {
+		m.contactsLoaded = true
+		cmd = loadPeopleCmd(m.ctx, m.client, "")
+	}
+	return m, cmd
+}
+
+// handleContactsKey processes input while the sidebar is in contacts mode.
+// Enter (when not editing a filter) starts a 1:1 chat with the highlighted
+// person; all other keys drive the list, whose filter doubles as a people
+// search box.
+func (m Model) handleContactsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// While typing in the filter box, let the list consume everything so
+	// Enter/Esc and characters edit the search rather than triggering actions.
+	if m.contacts.FilterState() == list.Filtering {
+		var cmd tea.Cmd
+		m.contacts, cmd = m.contacts.Update(msg)
+		return m, cmd
+	}
+	if key.Matches(msg, m.keys.Send) {
+		return m.startChatWithSelected()
+	}
+	var cmd tea.Cmd
+	m.contacts, cmd = m.contacts.Update(msg)
+	return m, cmd
+}
+
+// startChatWithSelected creates (or reuses) a 1:1 chat with the contact
+// currently highlighted in the contacts list.
+func (m Model) startChatWithSelected() (tea.Model, tea.Cmd) {
+	it, ok := m.contacts.SelectedItem().(personItem)
+	if !ok || m.client == nil || m.me == nil {
+		return m, nil
+	}
+	if it.person.ID == "" {
+		m.errText = "That contact can't be messaged (missing user id)."
+		return m, nil
+	}
+	return m, createChatCmd(m.ctx, m.client, m.me.ID, it.person.ID)
 }
 
 // openChat sets the active chat, renders any cached messages, and fetches fresh

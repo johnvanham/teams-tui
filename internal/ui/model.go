@@ -38,6 +38,15 @@ const (
 	focusCompose
 )
 
+// sidebarMode selects what the left column shows: the chat list or the
+// contacts (people) list used to start a new conversation.
+type sidebarMode int
+
+const (
+	sidebarChats sidebarMode = iota
+	sidebarContacts
+)
+
 // Model is the root Bubble Tea model.
 type Model struct {
 	ctx      context.Context
@@ -53,6 +62,7 @@ type Model struct {
 
 	// UI components.
 	list         list.Model
+	contacts     list.Model // people list shown in the sidebar's contacts mode
 	viewport     viewport.Model
 	compose      textarea.Model
 	spinner      spinner.Model
@@ -61,27 +71,29 @@ type Model struct {
 	keys         keyMap
 
 	// State.
-	phase        phase
-	focus        focusArea
-	deviceCode   *auth.DeviceCode
-	width        int
-	height       int
-	ready        bool
-	currentChat  string
-	messages     map[string][]graph.Message
-	chatOrder    []string                  // chat IDs in list order
-	chats        map[string]graph.Chat     // chat ID -> chat (for member lookup)
-	presences    map[string]graph.Presence // user ID -> presence
-	chatErrors   map[string]string         // chat ID -> message-load error notice
-	nextLink     map[string]string         // chat ID -> @odata.nextLink (older msgs)
-	loadingMore  map[string]bool           // chat ID -> older-page fetch in flight
-	lastSync     map[string]time.Time      // chat ID -> newest lastModified seen
-	chatsSig     string                    // signature of the rendered chat list
-	focused      bool                      // terminal window has focus
-	myPresence   *graph.Presence           // signed-in user's own presence
-	sessionID    string                    // app presence session ID (client ID)
-	showStatus   bool                      // status-picker overlay visible
-	chosenStatus *graph.PresenceOption     // status explicitly set by the user
+	phase          phase
+	focus          focusArea
+	sidebarMode    sidebarMode // chats vs contacts in the left column
+	contactsLoaded bool        // whether the people list has been fetched once
+	deviceCode     *auth.DeviceCode
+	width          int
+	height         int
+	ready          bool
+	currentChat    string
+	messages       map[string][]graph.Message
+	chatOrder      []string                  // chat IDs in list order
+	chats          map[string]graph.Chat     // chat ID -> chat (for member lookup)
+	presences      map[string]graph.Presence // user ID -> presence
+	chatErrors     map[string]string         // chat ID -> message-load error notice
+	nextLink       map[string]string         // chat ID -> @odata.nextLink (older msgs)
+	loadingMore    map[string]bool           // chat ID -> older-page fetch in flight
+	lastSync       map[string]time.Time      // chat ID -> newest lastModified seen
+	chatsSig       string                    // signature of the rendered chat list
+	focused        bool                      // terminal window has focus
+	myPresence     *graph.Presence           // signed-in user's own presence
+	sessionID      string                    // app presence session ID (client ID)
+	showStatus     bool                      // status-picker overlay visible
+	chosenStatus   *graph.PresenceOption     // status explicitly set by the user
 
 	// Transient notices.
 	errText     string
@@ -109,6 +121,19 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 	// item. This keeps the click-to-row geometry predictable; the "Chats"
 	// header is drawn separately in the sidebar chrome.
 	l.SetShowTitle(false)
+
+	// Contacts list shares the same delegate/geometry as the chat list so the
+	// sidebar can swap between them without a layout change. Filtering doubles
+	// as a "search people" box.
+	contactDelegate := list.NewDefaultDelegate()
+	contactDelegate.SetHeight(2)
+	contactDelegate.SetSpacing(1)
+	cl := list.New(nil, contactDelegate, 0, 0)
+	cl.Title = "Contacts"
+	cl.SetShowHelp(false)
+	cl.SetShowStatusBar(false)
+	cl.SetFilteringEnabled(true)
+	cl.SetShowTitle(false)
 
 	ta := textarea.New()
 	// Let the textarea grow with its content (handling wrapped lines and
@@ -144,6 +169,7 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 		notifier:     n,
 		sessionID:    cfg.ClientID,
 		list:         l,
+		contacts:     cl,
 		viewport:     vp,
 		statusPicker: picker,
 		compose:      ta,

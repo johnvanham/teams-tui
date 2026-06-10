@@ -57,6 +57,7 @@ func (m *Model) layout() {
 		listInnerH = 1
 	}
 	m.list.SetSize(listInnerW, listInnerH)
+	m.contacts.SetSize(listInnerW, listInnerH)
 
 	// Right column: messages viewport on top, compose box (grows) below.
 	rightW := m.width - sidebarWidth
@@ -197,14 +198,21 @@ func (m Model) viewReady() string {
 	}
 	title := styles.TitleBar.Width(m.width).Render(who)
 
-	// Sidebar with its own "Chats" header above the list. Pin the width so the
-	// column geometry is predictable (also matters for mouse click targeting).
+	// Sidebar with its own header above the list. Pin the width so the column
+	// geometry is predictable (also matters for mouse click targeting). The
+	// header label and list content switch with the sidebar mode.
 	sideStyle := styles.SidebarBlurred
 	if m.focus == focusChats {
 		sideStyle = styles.SidebarFocused
 	}
-	header := styles.SidebarHeader.Width(sidebarWidth - 4).Render("Chats")
-	sidebarInner := lipgloss.JoinVertical(lipgloss.Left, header, m.list.View())
+	headerLabel := "Chats"
+	listView := m.list.View()
+	if m.sidebarMode == sidebarContacts {
+		headerLabel = "Contacts"
+		listView = m.contacts.View()
+	}
+	header := styles.SidebarHeader.Width(sidebarWidth - 4).Render(headerLabel)
+	sidebarInner := lipgloss.JoinVertical(lipgloss.Left, header, listView)
 	sidebar := sideStyle.Width(sidebarWidth).Render(sidebarInner)
 
 	// Participants header (names + presence) above the conversation.
