@@ -1,0 +1,5 @@
+/teams-tui
+/dist/
+*.log
+debug.log
+config.json

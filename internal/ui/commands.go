@@ -1,0 +1,303 @@
+package ui
+
+import (
+	"context"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/jvh/teams-tui/internal/auth"
+	"github.com/jvh/teams-tui/internal/graph"
+)
+
+// --- Messages flowing into Update ---
+
+// deviceCodeMsg carries the device code to display during sign-in.
+type deviceCodeMsg struct {
+	code *auth.DeviceCode
+}
+
+// authDoneMsg signals the token source is ready (sign-in or cached token).
+type authDoneMsg struct {
+	tokens *auth.TokenSource
+}
+
+// errMsg is a generic error surfaced to the UI.
+type errMsg struct{ err error }
+
+// meMsg carries the signed-in user's profile.
+type meMsg struct{ me *graph.User }
+
+// chatsMsg carries the loaded chat list.
+type chatsMsg struct{ chats []graph.Chat }
+
+// messagesMsg carries messages for a specific chat.
+type messagesMsg struct {
+	chatID      string
+	messages    []graph.Message
+	nextLink    string // page link for older messages ("" if none/unknown)
+	incremental bool   // true for a cheap "since" poll (merge, don't replace)
+}
+
+// olderMessagesMsg carries an older page of messages to prepend.
+type olderMessagesMsg struct {
+	chatID   string
+	messages []graph.Message
+	nextLink string
+}
+
+// messagesErrMsg reports a failure to load a specific chat's messages.
+type messagesErrMsg struct {
+	chatID string
+	err    error
+}
+
+// sentMsg signals a message was sent successfully to a chat.
+type sentMsg struct{ chatID string }
+
+// meetingsMsg carries upcoming events for notification checks.
+type meetingsMsg struct{ events []graph.Event }
+
+// presencesMsg carries presence info for chat participants.
+type presencesMsg struct{ presences map[string]graph.Presence }
+
+// myPresenceMsg carries the signed-in user's own presence.
+type myPresenceMsg struct{ presence *graph.Presence }
+
+// presenceSetMsg signals a status change completed (so we can refresh).
+type presenceSetMsg struct{}
+
+// pollTickMsg drives periodic refresh of the chat list (slower cadence).
+type pollTickMsg time.Time
+
+// fastTickMsg drives the rapid incremental refresh of the open chat.
+type fastTickMsg time.Time
+
+// meetingTickMsg drives periodic checks for upcoming meetings.
+type meetingTickMsg time.Time
+
+// presenceTickMsg drives periodic presence refresh.
+type presenceTickMsg time.Time
+
+// sessionTickMsg drives the presence-session keep-alive heartbeat.
+type sessionTickMsg time.Time
+
+// sessionRefreshedMsg signals a successful presence-session heartbeat.
+type sessionRefreshedMsg struct{}
+
+const (
+	// wheelScrollLines is how many lines one mouse-wheel notch scrolls the
+	// conversation. Higher feels more responsive, especially on trackpads.
+	wheelScrollLines = 5
+	// fastInterval is the rapid incremental poll of the open chat when the app
+	// is focused — near-real-time without true push.
+	fastInterval = 2 * time.Second
+	// fastIntervalIdle is the backed-off open-chat poll when the terminal is
+	// unfocused.
+	fastIntervalIdle = 15 * time.Second
+	// presenceInterval is how often participant presence is refreshed.
+	presenceInterval = 30 * time.Second
+	// sessionExpiry is the lifetime requested for the app presence session.
+	sessionExpiry = 5 * time.Minute
+	// sessionInterval is the heartbeat period; shorter than sessionExpiry so
+	// the session never lapses.
+	sessionInterval = 4 * time.Minute
+)
+
+// fastTickCmd schedules the next incremental open-chat poll.
+func fastTickCmd(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(t time.Time) tea.Msg { return fastTickMsg(t) })
+}
+
+// --- Commands ---
+
+// requestDeviceCodeCmd begins the device authorization flow.
+func requestDeviceCodeCmd(ctx context.Context, a *auth.Authenticator) tea.Cmd {
+	return func() tea.Msg {
+		dc, err := a.RequestDeviceCode(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return deviceCodeMsg{dc}
+	}
+}
+
+// pollTokenCmd polls for the token after the user has been shown the code,
+// then persists it and constructs a TokenSource.
+func pollTokenCmd(ctx context.Context, a *auth.Authenticator, store *auth.Store, dc *auth.DeviceCode) tea.Cmd {
+	return func() tea.Msg {
+		tok, err := a.PollToken(ctx, dc)
+		if err != nil {
+			return errMsg{err}
+		}
+		if err := store.Save(tok); err != nil {
+			return errMsg{err}
+		}
+		return authDoneMsg{auth.NewTokenSource(a, store, tok)}
+	}
+}
+
+// loadMeCmd fetches the signed-in user's profile.
+func loadMeCmd(ctx context.Context, c *graph.Client) tea.Cmd {
+	return func() tea.Msg {
+		me, err := c.Me(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return meMsg{me}
+	}
+}
+
+// loadChatsCmd fetches the chat list.
+func loadChatsCmd(ctx context.Context, c *graph.Client) tea.Cmd {
+	return func() tea.Msg {
+		chats, err := c.ListChats(ctx, 50)
+		if err != nil {
+			return errMsg{err}
+		}
+		return chatsMsg{chats}
+	}
+}
+
+// loadMessagesCmd fetches messages for a chat. Failures are reported as a
+// per-chat messagesErrMsg (not a global errMsg) so that a chat we can't read
+// (e.g. some meeting chats that 403 under delegated permissions) shows an
+// inline notice instead of a sticky error in the status bar.
+func loadMessagesCmd(ctx context.Context, c *graph.Client, chatID string) tea.Cmd {
+	return func() tea.Msg {
+		msgs, next, err := c.ListMessagesPage(ctx, chatID, 40)
+		if err != nil {
+			return messagesErrMsg{chatID: chatID, err: err}
+		}
+		return messagesMsg{chatID: chatID, messages: msgs, nextLink: next}
+	}
+}
+
+// loadNewMessagesCmd fetches only messages changed since `since` for the open
+// chat (cheap incremental poll). Results are merged into the buffer.
+func loadNewMessagesCmd(ctx context.Context, c *graph.Client, chatID string, since time.Time) tea.Cmd {
+	return func() tea.Msg {
+		msgs, err := c.ListMessagesSince(ctx, chatID, since)
+		if err != nil {
+			// Non-fatal: skip this round, the next full poll will recover.
+			return messagesMsg{chatID: chatID, messages: nil, incremental: true}
+		}
+		return messagesMsg{chatID: chatID, messages: msgs, incremental: true}
+	}
+}
+
+// loadOlderMessagesCmd follows a chat's nextLink to fetch an older page.
+func loadOlderMessagesCmd(ctx context.Context, c *graph.Client, chatID, nextLink string) tea.Cmd {
+	return func() tea.Msg {
+		msgs, next, err := c.FollowMessagesPage(ctx, nextLink)
+		if err != nil {
+			// Non-fatal: just stop paginating on error.
+			return olderMessagesMsg{chatID: chatID, messages: nil, nextLink: ""}
+		}
+		return olderMessagesMsg{chatID: chatID, messages: msgs, nextLink: next}
+	}
+}
+
+// sendMessageCmd posts a message to a chat.
+func sendMessageCmd(ctx context.Context, c *graph.Client, chatID, text string) tea.Cmd {
+	return func() tea.Msg {
+		if _, err := c.SendMessage(ctx, chatID, text); err != nil {
+			return errMsg{err}
+		}
+		return sentMsg{chatID: chatID}
+	}
+}
+
+// loadMeetingsCmd fetches upcoming events within the lookahead window.
+func loadMeetingsCmd(ctx context.Context, c *graph.Client, lookahead time.Duration) tea.Cmd {
+	return func() tea.Msg {
+		events, err := c.UpcomingEvents(ctx, lookahead)
+		if err != nil {
+			// Calendar access may be unconsented; don't spam the UI.
+			return meetingsMsg{events: nil}
+		}
+		return meetingsMsg{events: events}
+	}
+}
+
+// loadPresencesCmd fetches presence for the given user IDs.
+func loadPresencesCmd(ctx context.Context, c *graph.Client, userIDs []string) tea.Cmd {
+	return func() tea.Msg {
+		if len(userIDs) == 0 {
+			return presencesMsg{presences: nil}
+		}
+		presences, err := c.GetPresences(ctx, userIDs)
+		if err != nil {
+			// Presence may be unconsented; degrade gracefully.
+			return presencesMsg{presences: nil}
+		}
+		return presencesMsg{presences: presences}
+	}
+}
+
+// loadMyPresenceCmd fetches the signed-in user's own presence.
+func loadMyPresenceCmd(ctx context.Context, c *graph.Client) tea.Cmd {
+	return func() tea.Msg {
+		p, err := c.MyPresence(ctx)
+		if err != nil {
+			return myPresenceMsg{presence: nil}
+		}
+		return myPresenceMsg{presence: p}
+	}
+}
+
+// keepSessionCmd refreshes the app presence session so the user's chosen
+// status persists while the TUI runs (heartbeat). When opt is set, it also
+// applies that availability/activity to the session.
+func keepSessionCmd(ctx context.Context, c *graph.Client, userID, sessionID string, opt *graph.PresenceOption, expiry time.Duration) tea.Cmd {
+	return func() tea.Msg {
+		availability, activity := "Available", "Available"
+		if opt != nil {
+			availability, activity = opt.Availability, opt.Activity
+		}
+		// Best-effort: ignore errors so a transient failure doesn't disrupt the
+		// UI; the next heartbeat will retry.
+		_ = c.SetPresence(ctx, userID, sessionID, availability, activity, expiry)
+		return sessionRefreshedMsg{}
+	}
+}
+
+// setStatusCmd sets the user's preferred presence (persists) and immediately
+// applies it to the app session so it takes effect now.
+func setStatusCmd(ctx context.Context, c *graph.Client, userID, sessionID string, opt graph.PresenceOption) tea.Cmd {
+	return func() tea.Msg {
+		if err := c.SetUserPreferredPresence(ctx, userID, opt.Availability, opt.Activity, 0); err != nil {
+			return errMsg{err}
+		}
+		_ = c.SetPresence(ctx, userID, sessionID, opt.Availability, opt.Activity, sessionExpiry)
+		return presenceSetMsg{}
+	}
+}
+
+// clearSessionCmd ends the app presence session (used on exit).
+func clearSessionCmd(ctx context.Context, c *graph.Client, userID, sessionID string) tea.Cmd {
+	return func() tea.Msg {
+		_ = c.ClearPresence(ctx, userID, sessionID)
+		return nil
+	}
+}
+
+// pollTickCmd schedules the next chat/message refresh.
+func pollTickCmd(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(t time.Time) tea.Msg { return pollTickMsg(t) })
+}
+
+// meetingTickCmd schedules the next meeting check.
+func meetingTickCmd(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(t time.Time) tea.Msg { return meetingTickMsg(t) })
+}
+
+// presenceTickCmd schedules the next presence refresh.
+func presenceTickCmd(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(t time.Time) tea.Msg { return presenceTickMsg(t) })
+}
+
+// sessionTickCmd schedules the next presence-session heartbeat.
+func sessionTickCmd(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(t time.Time) tea.Msg { return sessionTickMsg(t) })
+}

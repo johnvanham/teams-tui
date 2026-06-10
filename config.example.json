@@ -1,0 +1,7 @@
+{
+  "client_id": "REPLACE-WITH-APPLICATION-CLIENT-ID",
+  "tenant_id": "REPLACE-WITH-DIRECTORY-TENANT-ID",
+  "poll_interval_seconds": 10,
+  "meeting_lookahead_minutes": 5,
+  "disable_desktop_notify": false
+}
