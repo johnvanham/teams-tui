@@ -217,6 +217,63 @@ func (c *Client) ListChats(ctx context.Context, top int) ([]Chat, error) {
 	return resp.Value, nil
 }
 
+// ListPeople returns contacts relevant to the signed-in user via GET
+// /me/people, powering the "start new chat" people picker. When search is
+// non-empty it adds a $search filter (Graph requires the value to be wrapped in
+// double quotes) and the ConsistencyLevel: eventual header that $search
+// requires. Results are capped at 25 and trimmed to the fields the picker
+// needs.
+func (c *Client) ListPeople(ctx context.Context, search string) ([]Person, error) {
+	q := url.Values{}
+	q.Set("$top", "25")
+	q.Set("$select", "id,displayName,userPrincipalName,scoredEmailAddresses")
+
+	path := "/me/people?" + q.Encode()
+	var headers map[string]string
+	if search != "" {
+		// $search must carry a double-quoted value (e.g. $search="bob"); the
+		// quotes are part of the value, so append it after url.Values encoding.
+		path += "&$search=" + url.QueryEscape(`"`+search+`"`)
+		headers = map[string]string{"ConsistencyLevel": "eventual"}
+	}
+
+	var resp listResponse[Person]
+	if err := c.do(ctx, http.MethodGet, path, nil, headers, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Value, nil
+}
+
+// CreateOneOnOneChat creates a 1:1 chat between the signed-in user and another
+// user via POST /chats, returning the created chat so the caller can open it.
+// The user@odata.bind references are built from the client's baseURL so custom
+// Graph endpoints are respected.
+func (c *Client) CreateOneOnOneChat(ctx context.Context, myUserID, otherUserID string) (*Chat, error) {
+	member := func(userID string) map[string]any {
+		return map[string]any{
+			"@odata.type":     "#microsoft.graph.aadUserConversationMember",
+			"roles":           []string{"owner"},
+			"user@odata.bind": c.baseURL + "/users('" + userID + "')",
+		}
+	}
+	payload := map[string]any{
+		"chatType": "oneOnOne",
+		"members": []map[string]any{
+			member(myUserID),
+			member(otherUserID),
+		},
+	}
+	buf, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	var chat Chat
+	if err := c.do(ctx, http.MethodPost, "/chats", bytes.NewReader(buf), nil, &chat); err != nil {
+		return nil, err
+	}
+	return &chat, nil
+}
+
 // GetPresences fetches presence for up to 650 users in one batch via
 // POST /communications/getPresencesByUserId. Requires the Presence.Read.All
 // delegated permission. Returns a map keyed by user ID.
@@ -319,6 +376,73 @@ func (c *Client) SendMessage(ctx context.Context, chatID, text string) (*Message
 		return nil, err
 	}
 	return &msg, nil
+}
+
+// EditMessage replaces the plaintext body of an existing chat message via
+// PATCH /chats/{chat-id}/messages/{message-id}. Note the path uses /chats/...
+// (not /me/chats/...) because Graph's message PATCH endpoint lives under
+// /chats/{id}/messages/{id}. Graph returns 204 No Content with no body on a
+// successful edit, so there is nothing to decode; on success we synthesize a
+// minimal Message carrying the new body so the caller has something to render.
+func (c *Client) EditMessage(ctx context.Context, chatID, messageID, text string) (*Message, error) {
+	payload := map[string]any{
+		"body": map[string]string{
+			"contentType": "text",
+			"content":     text,
+		},
+	}
+	buf, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	path := fmt.Sprintf("/chats/%s/messages/%s",
+		url.PathEscape(chatID), url.PathEscape(messageID))
+	// Pass nil as out: the PATCH responds 204 No Content, so there is no body
+	// to decode. A nil error means the edit succeeded.
+	if err := c.do(ctx, http.MethodPatch, path, bytes.NewReader(buf), nil, nil); err != nil {
+		return nil, err
+	}
+	return &Message{ID: messageID, Body: MessageBody{ContentType: "text", Content: text}}, nil
+}
+
+// FetchHostedContent downloads the raw bytes of an inline/hosted image so it can
+// be written to a temp file and opened externally. urlOrPath may be an absolute
+// Graph URL (as found in an <img src=...> hostedContents reference) or a
+// relative path; either way it is fetched with the bearer token. Unlike do(),
+// which decodes JSON, this returns the unparsed body plus the response
+// Content-Type so the caller can pick a sensible file extension.
+func (c *Client) FetchHostedContent(ctx context.Context, urlOrPath string) ([]byte, string, error) {
+	tok, err := c.tokens.Token(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+
+	endpoint := urlOrPath
+	if len(urlOrPath) == 0 || urlOrPath[0] == '/' {
+		endpoint = c.baseURL + urlOrPath
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("GET %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, "", parseAPIError(resp, http.MethodGet, urlOrPath)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", fmt.Errorf("reading %s: %w", endpoint, err)
+	}
+	return data, resp.Header.Get("Content-Type"), nil
 }
 
 // UpcomingEvents returns calendar events occurring within the lookahead window

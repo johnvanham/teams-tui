@@ -14,6 +14,28 @@ type User struct {
 	Mail              string `json:"mail"`
 }
 
+// Person is a contact surfaced by the /me/people endpoint, used to power the
+// "start new chat" people picker. ScoredEmailAddresses is Graph's ranked list
+// of the person's emails; the highest-scored one comes first.
+type Person struct {
+	ID                   string `json:"id"`
+	DisplayName          string `json:"displayName"`
+	UserPrincipalName    string `json:"userPrincipalName"`
+	ScoredEmailAddresses []struct {
+		Address string `json:"address"`
+	} `json:"scoredEmailAddresses"`
+}
+
+// Email returns the person's first (highest-scored) email address, or empty
+// when none are present, so callers can show a contact's address without
+// indexing into the raw slice.
+func (p Person) Email() string {
+	if len(p.ScoredEmailAddresses) > 0 {
+		return p.ScoredEmailAddresses[0].Address
+	}
+	return ""
+}
+
 // Presence holds a user's Teams availability.
 type Presence struct {
 	ID           string `json:"id"`
@@ -136,15 +158,27 @@ type MessagePreview struct {
 
 // Message is a Teams chat message.
 type Message struct {
-	ID           string      `json:"id"`
-	CreatedAt    time.Time   `json:"createdDateTime"`
-	LastModified time.Time   `json:"lastModifiedDateTime"`
-	MessageType  string      `json:"messageType"`
-	Importance   string      `json:"importance"`
-	Body         MessageBody `json:"body"`
-	From         *From       `json:"from"`
-	DeletedAt    *time.Time  `json:"deletedDateTime"`
-	Reactions    []Reaction  `json:"reactions"`
+	ID           string       `json:"id"`
+	CreatedAt    time.Time    `json:"createdDateTime"`
+	LastModified time.Time    `json:"lastModifiedDateTime"`
+	MessageType  string       `json:"messageType"`
+	Importance   string       `json:"importance"`
+	Body         MessageBody  `json:"body"`
+	From         *From        `json:"from"`
+	DeletedAt    *time.Time   `json:"deletedDateTime"`
+	Reactions    []Reaction   `json:"reactions"`
+	Attachments  []Attachment `json:"attachments"`
+}
+
+// Attachment is a file or rich-content attachment on a chat message. Graph
+// surfaces shared files and (some) images here; inline images embedded in the
+// body HTML are exposed separately via Message.Images. ContentURL points at the
+// downloadable content when present.
+type Attachment struct {
+	ID          string `json:"id"`
+	ContentType string `json:"contentType"`
+	ContentURL  string `json:"contentUrl"`
+	Name        string `json:"name"`
 }
 
 // Reaction is a single reaction on a chat message.

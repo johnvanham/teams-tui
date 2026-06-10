@@ -50,6 +50,8 @@ var DefaultScopes = []string{
 	"profile",
 	"User.Read",
 	"Chat.ReadWrite",
+	// People.Read powers the contacts/people picker (GET /me/people).
+	"People.Read",
 	"Calendars.Read",
 	"Presence.Read.All",
 	"Presence.ReadWrite",
