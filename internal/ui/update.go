@@ -239,6 +239,14 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// In contacts mode the sidebar holds the people list, whose row geometry
+	// the chat click-mapping doesn't track; keep contact selection keyboard-
+	// driven (focus the sidebar so arrows/enter work).
+	if m.sidebarMode == sidebarContacts {
+		m.focus = focusChats
+		m.compose.Blur()
+		return m, nil
+	}
 	idx := m.chatIndexAtY(msg.Y)
 	if idx < 0 {
 		return m, nil
@@ -261,7 +269,11 @@ func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.withinSidebar(msg.X) {
 		var cmd tea.Cmd
-		m.list, cmd = m.list.Update(msg)
+		if m.sidebarMode == sidebarContacts {
+			m.contacts, cmd = m.contacts.Update(msg)
+		} else {
+			m.list, cmd = m.list.Update(msg)
+		}
 		return m, cmd
 	}
 	// Scroll the conversation. A larger step per wheel notch feels more
@@ -823,6 +835,8 @@ func (m Model) updateComponents(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.phase == phaseReady {
 		m.list, cmd = m.list.Update(msg)
+		cmds = append(cmds, cmd)
+		m.contacts, cmd = m.contacts.Update(msg)
 		cmds = append(cmds, cmd)
 		m.viewport, cmd = m.viewport.Update(msg)
 		cmds = append(cmds, cmd)

@@ -70,6 +70,7 @@ tenant. An administrator performs these one-time steps in the
    permissions** and add:
    - `User.Read`
    - `Chat.ReadWrite`
+   - `People.Read` (to list contacts and start new chats from them)
    - `Calendars.Read` (for meeting notifications; optional)
    - `Presence.Read.All` (to show participants' Teams status; needs admin consent)
    - `Presence.ReadWrite` (to show and set your own status)
@@ -157,9 +158,12 @@ registration first if your tenant requires it.
 | -------------- | ---------------------------------------- |
 | `tab` / `shift+tab` | Move focus between Chats / Messages / Compose |
 | `↑`/`↓` `j`/`k`| Navigate the focused pane                |
-| `enter`        | Open selected chat (Chats) / send message (Compose) |
+| `enter`        | Open selected chat (Chats) / send message (Compose) / start chat (Contacts) |
 | `alt+enter`    | Insert a newline in the compose box      |
-| `/`            | Filter the chat list                     |
+| `/`            | Filter the chat list / search contacts   |
+| `ctrl+o`       | Toggle the sidebar between Chats and Contacts (start a new chat) |
+| `ctrl+e`       | Edit your most recent message            |
+| `ctrl+v`       | Open the newest image in the chat in your default viewer/browser |
 | `ctrl+r`       | Refresh now                              |
 | `ctrl+s`       | Open the status picker (set your presence) |
 | `ctrl+g`       | Toggle full help                         |
@@ -188,4 +192,8 @@ into the model. Polling is driven by `tea.Tick`.
 - Message history is fetched per chat on demand and refreshed on the poll tick.
 - This is a chat-focused client; it does not implement calls, channels/teams
   browsing, files, or app tabs.
-- Reactions, threaded replies, and attachments are not yet rendered.
+- Reactions are rendered; threaded replies are not.
+- Images in messages are shown as placeholders (`🖼 [n] name`); press `ctrl+v`
+  to open the newest one in your OS default image viewer/browser (inline Graph
+  hosted content is downloaded with your token first). Other attachment types
+  are not yet rendered.
