@@ -433,6 +433,10 @@ func (m Model) activeBanner() string {
 
 // renderConversation formats the current chat's messages into the viewport.
 func (m *Model) renderConversation() {
+	// Reset click/keybinding image state up front so every early return below
+	// leaves no stale placeholders from a previously open chat.
+	m.convImages = m.convImages[:0]
+	m.imageLines = nil
 	if m.currentChat == "" {
 		m.viewport.SetContent(styles.Hint.Render("Select a chat to start messaging."))
 		return
@@ -459,8 +463,11 @@ func (m *Model) renderConversation() {
 	width := m.viewport.Width()
 	var b strings.Builder
 	// Collect every image in the conversation, in display order, so the image
-	// keybinding can reference them by number ("open image [2]").
-	m.convImages = m.convImages[:0]
+	// keybinding can reference them by number ("open image [2]"). line tracks
+	// the current 0-based content line so we can map a click on a placeholder
+	// row back to its image (imageLines).
+	m.imageLines = make(map[int]int)
+	line := 0
 	for _, msg := range ordered {
 		text := msg.Body.PlainText()
 		if msg.DeletedAt != nil {
@@ -480,28 +487,36 @@ func (m *Model) renderConversation() {
 		header := nameStyle.Render(name) + " " + styles.Timestamp.Render(ts)
 		b.WriteString(header)
 		b.WriteString("\n")
+		line++ // header row
 		if text != "" {
-			b.WriteString(wrap(text, width))
+			wrapped := wrap(text, width)
+			b.WriteString(wrapped)
 			b.WriteString("\n")
+			line += strings.Count(wrapped, "\n") + 1
 		}
 		// Render a numbered placeholder for each image; the number matches the
-		// index used by the "view image" action (1-based for humans).
+		// index used by the "view image" action (1-based for humans). Record
+		// the content line so a click on the row can open that exact image.
 		for _, img := range images {
 			m.convImages = append(m.convImages, img)
-			n := len(m.convImages)
+			idx := len(m.convImages) - 1
 			label := img.Name
 			if label == "" {
 				label = "image"
 			}
-			placeholder := fmt.Sprintf("🖼  [%d] %s — ctrl+v to view", n, label)
+			placeholder := fmt.Sprintf("🖼  [%d] %s — ctrl+v / click to view", idx+1, label)
 			b.WriteString(styles.ImagePlaceholder.Render(placeholder))
 			b.WriteString("\n")
+			m.imageLines[line] = idx
+			line++ // placeholder row
 		}
 		if reactions := msg.ReactionSummary(); len(reactions) > 0 {
 			b.WriteString(styles.Reaction.Render(strings.Join(reactions, "  ")))
 			b.WriteString("\n")
+			line++ // reaction row
 		}
 		b.WriteString("\n")
+		line++ // blank separator row
 	}
 	m.viewport.SetContent(strings.TrimRight(b.String(), "\n"))
 }

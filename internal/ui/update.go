@@ -220,6 +220,35 @@ func (m Model) delegateRows() int {
 	return 2 /*delegate height*/ + 1 /*spacing*/
 }
 
+// messagesContentTop is the screen Y of the first content row inside the
+// messages viewport. It mirrors the right-column geometry in viewReady():
+// title bar, optional banner, the participants header, then the pane's top
+// border.
+func (m Model) messagesContentTop() int {
+	bannerRows := 0
+	if m.activeBanner() != "" {
+		bannerRows = 1
+	}
+	return titleHeight + bannerRows + participantsHeaderRows + 1 /*pane top border*/
+}
+
+// imageAtY maps a screen Y coordinate to the index of an image placeholder in
+// convImages, if the click landed on one. It converts the screen row to a
+// viewport content line (accounting for scroll offset) and looks it up in the
+// imageLines map built during rendering.
+func (m Model) imageAtY(y int) (int, bool) {
+	if m.currentChat == "" || len(m.imageLines) == 0 {
+		return 0, false
+	}
+	rowInPane := y - m.messagesContentTop()
+	if rowInPane < 0 || rowInPane >= m.viewport.Height() {
+		return 0, false
+	}
+	contentLine := m.viewport.YOffset() + rowInPane
+	idx, ok := m.imageLines[contentLine]
+	return idx, ok
+}
+
 // withinSidebar reports whether an X coordinate falls inside the sidebar
 // column (excluding its left/right borders).
 func (m Model) withinSidebar(x int) bool {
@@ -234,6 +263,10 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if !m.withinSidebar(msg.X) {
 		// A click in the right column focuses the messages pane for scrolling.
 		if msg.X >= sidebarWidth {
+			// A click directly on an image placeholder opens that image.
+			if idx, ok := m.imageAtY(msg.Y); ok {
+				return m.viewImageAt(idx)
+			}
 			m.focus = focusMessages
 			m.compose.Blur()
 		}
@@ -959,17 +992,26 @@ func (m Model) startChatWithSelected() (tea.Model, tea.Cmd) {
 // conversation using the OS default app/browser. The newest image is the one
 // the user most likely just received, so it's the default target.
 func (m Model) viewImage() (tea.Model, tea.Cmd) {
-	if m.openingImage || m.client == nil {
-		return m, nil
-	}
 	if len(m.convImages) == 0 {
 		m.errText = "No images in this conversation."
 		return m, nil
 	}
-	img := m.convImages[len(m.convImages)-1]
+	return m.viewImageAt(len(m.convImages) - 1)
+}
+
+// viewImageAt downloads (if needed) and opens the image at the given index in
+// convImages using the OS default app/browser. Shared by the keybinding (newest
+// image) and clicking a specific placeholder.
+func (m Model) viewImageAt(idx int) (tea.Model, tea.Cmd) {
+	if m.openingImage || m.client == nil {
+		return m, nil
+	}
+	if idx < 0 || idx >= len(m.convImages) {
+		return m, nil
+	}
 	m.openingImage = true
 	m.errText = "Opening image…"
-	return m, openImageCmd(m.ctx, m.client, img)
+	return m, openImageCmd(m.ctx, m.client, m.convImages[idx])
 }
 
 // openChat sets the active chat, renders any cached messages, and fetches fresh

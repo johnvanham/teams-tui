@@ -163,7 +163,7 @@ registration first if your tenant requires it.
 | `/`            | Filter the chat list / search contacts   |
 | `ctrl+o`       | Toggle the sidebar between Chats and Contacts (start a new chat) |
 | `ctrl+e`       | Edit your most recent message            |
-| `ctrl+v`       | Open the newest image in the chat in your default viewer/browser |
+| `ctrl+v` / click | Open an image in your default viewer/browser (`ctrl+v` = newest; click a placeholder for that one) |
 | `ctrl+r`       | Refresh now                              |
 | `ctrl+s`       | Open the status picker (set your presence) |
 | `ctrl+g`       | Toggle full help                         |
@@ -194,6 +194,6 @@ into the model. Polling is driven by `tea.Tick`.
   browsing, files, or app tabs.
 - Reactions are rendered; threaded replies are not.
 - Images in messages are shown as placeholders (`🖼 [n] name`); press `ctrl+v`
-  to open the newest one in your OS default image viewer/browser (inline Graph
-  hosted content is downloaded with your token first). Other attachment types
-  are not yet rendered.
+  to open the newest one, or click a placeholder to open that specific image, in
+  your OS default image viewer/browser (inline Graph hosted content is
+  downloaded with your token first). Other attachment types are not yet rendered.
