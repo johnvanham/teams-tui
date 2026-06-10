@@ -102,6 +102,14 @@ var (
 			Background(lipgloss.Color("#2A2A3D")).
 			Padding(0, 1)
 
+	// ImagePlaceholder marks an inline image the terminal can't render; the
+	// user opens it in their default viewer/browser with the image keybinding.
+	ImagePlaceholder = lipgloss.NewStyle().
+				Foreground(PurpleLt).
+				Background(lipgloss.Color("#2A2A3D")).
+				Italic(true).
+				Padding(0, 1)
+
 	// Banner for meeting/notification alerts.
 	Banner = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#000000")).

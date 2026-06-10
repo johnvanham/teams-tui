@@ -88,8 +88,10 @@ type Model struct {
 	nextLink       map[string]string         // chat ID -> @odata.nextLink (older msgs)
 	loadingMore    map[string]bool           // chat ID -> older-page fetch in flight
 	lastSync       map[string]time.Time      // chat ID -> newest lastModified seen
-	chatsSig       string                    // signature of the rendered chat list
-	focused        bool                      // terminal window has focus
+	chatsSig     string                    // signature of the rendered chat list
+	convImages   []graph.ImageRef          // images in the open chat, display order
+	openingImage bool                      // an image download/open is in flight
+	focused      bool                      // terminal window has focus
 	myPresence     *graph.Presence           // signed-in user's own presence
 	sessionID      string                    // app presence session ID (client ID)
 	showStatus     bool                      // status-picker overlay visible

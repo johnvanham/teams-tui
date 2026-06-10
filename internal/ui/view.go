@@ -452,12 +452,17 @@ func (m *Model) renderConversation() {
 
 	width := m.viewport.Width()
 	var b strings.Builder
+	// Collect every image in the conversation, in display order, so the image
+	// keybinding can reference them by number ("open image [2]").
+	m.convImages = m.convImages[:0]
 	for _, msg := range ordered {
 		text := msg.Body.PlainText()
 		if msg.DeletedAt != nil {
 			text = "(message deleted)"
 		}
-		if text == "" {
+		images := msg.Images()
+		// Skip truly empty messages (no text and no images).
+		if text == "" && len(images) == 0 {
 			continue
 		}
 		name := msg.SenderName()
@@ -467,11 +472,25 @@ func (m *Model) renderConversation() {
 		}
 		ts := msg.CreatedAt.Local().Format("15:04")
 		header := nameStyle.Render(name) + " " + styles.Timestamp.Render(ts)
-		body := wrap(text, width)
 		b.WriteString(header)
 		b.WriteString("\n")
-		b.WriteString(body)
-		b.WriteString("\n")
+		if text != "" {
+			b.WriteString(wrap(text, width))
+			b.WriteString("\n")
+		}
+		// Render a numbered placeholder for each image; the number matches the
+		// index used by the "view image" action (1-based for humans).
+		for _, img := range images {
+			m.convImages = append(m.convImages, img)
+			n := len(m.convImages)
+			label := img.Name
+			if label == "" {
+				label = "image"
+			}
+			placeholder := fmt.Sprintf("🖼  [%d] %s — ctrl+v to view", n, label)
+			b.WriteString(styles.ImagePlaceholder.Render(placeholder))
+			b.WriteString("\n")
+		}
 		if reactions := msg.ReactionSummary(); len(reactions) > 0 {
 			b.WriteString(styles.Reaction.Render(strings.Join(reactions, "  ")))
 			b.WriteString("\n")

@@ -2,12 +2,14 @@ package ui
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/jvh/teams-tui/internal/auth"
 	"github.com/jvh/teams-tui/internal/graph"
+	"github.com/jvh/teams-tui/internal/open"
 )
 
 // --- Messages flowing into Update ---
@@ -65,6 +67,13 @@ type peopleMsg struct {
 // chatCreatedMsg signals a new 1:1 chat was created so it can be opened.
 type chatCreatedMsg struct {
 	chat *graph.Chat
+	err  error
+}
+
+// imageOpenedMsg reports the result of downloading and opening an image in the
+// OS default viewer/browser.
+type imageOpenedMsg struct {
+	name string
 	err  error
 }
 
@@ -242,6 +251,41 @@ func createChatCmd(ctx context.Context, c *graph.Client, myUserID, otherUserID s
 			return chatCreatedMsg{err: err}
 		}
 		return chatCreatedMsg{chat: chat}
+	}
+}
+
+// openImageCmd opens an image referenced in a message. Inline/hosted images on
+// graph.microsoft.com require an authenticated fetch, so we download the bytes
+// and hand a temp file to the OS opener; plain http(s) URLs (e.g. public
+// attachments) are opened directly in the browser. Either way the terminal
+// can't render the image, so we delegate to the platform's default app.
+func openImageCmd(ctx context.Context, c *graph.Client, img graph.ImageRef) tea.Cmd {
+	return func() tea.Msg {
+		name := img.Name
+		if name == "" {
+			name = "image"
+		}
+		// Authenticated hosted content (Graph) must be fetched with our bearer
+		// token; opening the URL directly would 401 in a browser.
+		if strings.Contains(img.URL, "graph.microsoft.com") {
+			data, _, err := c.FetchHostedContent(ctx, img.URL)
+			if err != nil {
+				return imageOpenedMsg{name: name, err: err}
+			}
+			path, err := open.SaveTempImage(data, name)
+			if err != nil {
+				return imageOpenedMsg{name: name, err: err}
+			}
+			if err := open.Open(path); err != nil {
+				return imageOpenedMsg{name: name, err: err}
+			}
+			return imageOpenedMsg{name: name}
+		}
+		// Public URL: let the browser/default app fetch and display it.
+		if err := open.Open(img.URL); err != nil {
+			return imageOpenedMsg{name: name, err: err}
+		}
+		return imageOpenedMsg{name: name}
 	}
 }
 

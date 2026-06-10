@@ -125,6 +125,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case chatCreatedMsg:
 		return m.handleChatCreated(msg)
 
+	case imageOpenedMsg:
+		m.openingImage = false
+		if msg.err != nil {
+			m.errText = "Couldn't open image: " + msg.err.Error()
+		}
+		return m, nil
+
 	case meetingsMsg:
 		return m.handleMeetings(msg)
 
@@ -364,6 +371,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.help.ShowAll = !m.help.ShowAll
 		m.layout()
 		return m, nil
+	}
+
+	// View an image: opens the most recent image in the conversation in the OS
+	// default viewer/browser. Available from any pane so it doesn't fight the
+	// compose box's text input (ctrl+v isn't a printable key).
+	if key.Matches(msg, m.keys.Image) {
+		return m.viewImage()
 	}
 
 	switch {
@@ -905,6 +919,23 @@ func (m Model) startChatWithSelected() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, createChatCmd(m.ctx, m.client, m.me.ID, it.person.ID)
+}
+
+// viewImage downloads (if needed) and opens the most recent image in the open
+// conversation using the OS default app/browser. The newest image is the one
+// the user most likely just received, so it's the default target.
+func (m Model) viewImage() (tea.Model, tea.Cmd) {
+	if m.openingImage || m.client == nil {
+		return m, nil
+	}
+	if len(m.convImages) == 0 {
+		m.errText = "No images in this conversation."
+		return m, nil
+	}
+	img := m.convImages[len(m.convImages)-1]
+	m.openingImage = true
+	m.errText = "Opening image…"
+	return m, openImageCmd(m.ctx, m.client, img)
 }
 
 // openChat sets the active chat, renders any cached messages, and fetches fresh
