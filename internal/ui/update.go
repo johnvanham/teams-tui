@@ -161,7 +161,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case presenceTickMsg:
 		var presCmd tea.Cmd
 		if m.client != nil {
-			presCmd = loadPresencesCmd(m.ctx, m.client, m.currentChatParticipantIDs())
+			presCmd = loadPresencesCmd(m.ctx, m.client, m.presenceWatchIDs())
 		}
 		return m, tea.Batch(presCmd, presenceTickCmd(presenceInterval))
 
@@ -601,11 +601,58 @@ func (m Model) handlePeople(msg peopleMsg) (tea.Model, tea.Cmd) {
 		m.errText = "Couldn't load contacts: " + msg.err.Error()
 		return m, nil
 	}
-	items := make([]list.Item, 0, len(msg.people))
-	for _, p := range msg.people {
-		items = append(items, personItem{person: p})
+	m.people = msg.people
+	setCmd := m.rebuildContacts()
+	// Fetch presence for the loaded contacts so their availability shows next
+	// to each name once it arrives.
+	presCmd := loadPresencesCmd(m.ctx, m.client, m.peopleUserIDs())
+	return m, tea.Batch(setCmd, presCmd)
+}
+
+// rebuildContacts repopulates the contacts list from m.people, baking each
+// contact's latest known presence into its item. Called when people load and
+// whenever presence updates.
+func (m *Model) rebuildContacts() tea.Cmd {
+	items := make([]list.Item, 0, len(m.people))
+	for _, p := range m.people {
+		items = append(items, personItem{person: p, presence: m.presences[p.ID]})
 	}
-	return m, m.contacts.SetItems(items)
+	return m.contacts.SetItems(items)
+}
+
+// peopleUserIDs returns the user IDs of the currently loaded contacts for a
+// presence lookup.
+func (m Model) peopleUserIDs() []string {
+	ids := make([]string, 0, len(m.people))
+	for _, p := range m.people {
+		if p.ID != "" {
+			ids = append(ids, p.ID)
+		}
+	}
+	return ids
+}
+
+// presenceWatchIDs returns the de-duplicated set of user IDs whose presence the
+// periodic tick should refresh: the current chat's participants always, plus
+// the loaded contacts while the contacts panel is open so their status stays
+// current.
+func (m Model) presenceWatchIDs() []string {
+	seen := make(map[string]bool)
+	var ids []string
+	add := func(list []string) {
+		for _, id := range list {
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	add(m.currentChatParticipantIDs())
+	if m.sidebarMode == sidebarContacts {
+		add(m.peopleUserIDs())
+	}
+	return ids
 }
 
 // handleChatCreated opens a freshly created 1:1 chat: it switches the sidebar
@@ -779,12 +826,25 @@ func (m Model) handleMessagesErr(msg messagesErrMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handlePresences merges fetched presence info into the model. Re-rendering the
-// header happens naturally on the next View; the conversation header reads from
-// m.presences directly.
+// handlePresences merges fetched presence info into the model. The conversation
+// header re-renders naturally on the next View (it reads m.presences directly),
+// but the contacts list bakes presence into its items, so rebuild it when an
+// update touches a loaded contact.
 func (m Model) handlePresences(msg presencesMsg) (tea.Model, tea.Cmd) {
+	affectsContacts := false
 	for id, p := range msg.presences {
 		m.presences[id] = p
+		if !affectsContacts {
+			for _, person := range m.people {
+				if person.ID == id {
+					affectsContacts = true
+					break
+				}
+			}
+		}
+	}
+	if affectsContacts {
+		return m, m.rebuildContacts()
 	}
 	return m, nil
 }

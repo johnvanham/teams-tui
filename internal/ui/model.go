@@ -89,6 +89,7 @@ type Model struct {
 	loadingMore    map[string]bool           // chat ID -> older-page fetch in flight
 	lastSync       map[string]time.Time      // chat ID -> newest lastModified seen
 	chatsSig       string                    // signature of the rendered chat list
+	people         []graph.Person            // contacts currently shown in the sidebar
 	convImages     []graph.ImageRef          // images in the open chat, display order
 	imageLines     map[int]int               // viewport content line -> convImages index
 	openingImage   bool                      // an image download/open is in flight
