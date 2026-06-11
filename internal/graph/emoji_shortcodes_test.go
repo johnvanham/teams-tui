@@ -80,6 +80,8 @@ func TestMatchEmoticonSuffix(t *testing.T) {
 		{"not an emoticon", "just text", "", 0, false},
 		{"emoticon not at end", ":-) more", "", 0, false},
 		{"shrug", "ok \\o/", "🙌", 3, true},
+		{"confused dash", "hmm :-\\", "😕", 3, true},
+		{"confused short", "well :\\", "😕", 2, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
