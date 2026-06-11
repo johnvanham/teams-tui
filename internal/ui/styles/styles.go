@@ -14,10 +14,10 @@ var (
 	Red       = lipgloss.Color("#C50F1F")
 	Yellow    = lipgloss.Color("#FFB900")
 	Bg        = lipgloss.Color("#1F1F2E")
-	// UnreadBg is a muted warm orange used to highlight chats with unread
-	// messages: low-luminance so it reads clearly against the dark sidebar
-	// without overpowering it, while keeping light foreground text legible.
-	UnreadBg = lipgloss.Color("#5C3A14")
+	// Orange is the bright warm accent used to mark chats with unread messages
+	// (OpenCode's "warning" orange). It reads clearly against the dark sidebar
+	// while staying distinct from the pink used for the selected chat.
+	Orange = lipgloss.Color("#F5A742")
 )
 
 var (
@@ -143,18 +143,16 @@ var (
 	// Hint is dim helper text.
 	Hint = lipgloss.NewStyle().Foreground(Grey)
 
-	// UnreadTitle / UnreadDesc fill a chat row with unread messages with a warm
-	// background so it stands out from already-read chats. They mirror the
+	// UnreadTitle / UnreadDesc colour a chat row with unread messages in the
+	// orange accent so it stands out from already-read chats. They mirror the
 	// default delegate's normal title/description layout (left padding) so the
-	// only visible change is the background and a brighter, bold title.
+	// only visible change is the foreground colour (and a bold title).
 	UnreadTitle = lipgloss.NewStyle().
-			Foreground(White).
-			Background(UnreadBg).
+			Foreground(Orange).
 			Bold(true).
 			Padding(0, 0, 0, 2)
 
 	UnreadDesc = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#D8C4B0")).
-			Background(UnreadBg).
+			Foreground(Orange).
 			Padding(0, 0, 0, 2)
 )
