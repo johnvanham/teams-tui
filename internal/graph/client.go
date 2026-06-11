@@ -378,13 +378,16 @@ func (c *Client) ListMessagesSince(ctx context.Context, chatID string, since tim
 	return resp.Value, nil
 }
 
-// SendMessage posts a plaintext message to a chat and returns the created
-// message.
+// SendMessage posts a message to a chat and returns the created message. The
+// text is converted to Teams HTML (see ComposeHTML) so newlines and Markdown
+// code fences/`inline code` render correctly for every participant and in the
+// native client — Graph's "text" content type otherwise collapses newlines and
+// shows fences literally.
 func (c *Client) SendMessage(ctx context.Context, chatID, text string) (*Message, error) {
 	payload := map[string]any{
 		"body": map[string]string{
-			"contentType": "text",
-			"content":     text,
+			"contentType": "html",
+			"content":     ComposeHTML(text),
 		},
 	}
 	buf, err := json.Marshal(payload)
@@ -406,10 +409,11 @@ func (c *Client) SendMessage(ctx context.Context, chatID, text string) (*Message
 // successful edit, so there is nothing to decode; on success we synthesize a
 // minimal Message carrying the new body so the caller has something to render.
 func (c *Client) EditMessage(ctx context.Context, chatID, messageID, text string) (*Message, error) {
+	htmlBody := ComposeHTML(text)
 	payload := map[string]any{
 		"body": map[string]string{
-			"contentType": "text",
-			"content":     text,
+			"contentType": "html",
+			"content":     htmlBody,
 		},
 	}
 	buf, err := json.Marshal(payload)
@@ -423,7 +427,7 @@ func (c *Client) EditMessage(ctx context.Context, chatID, messageID, text string
 	if err := c.do(ctx, http.MethodPatch, path, bytes.NewReader(buf), nil, nil); err != nil {
 		return nil, err
 	}
-	return &Message{ID: messageID, Body: MessageBody{ContentType: "text", Content: text}}, nil
+	return &Message{ID: messageID, Body: MessageBody{ContentType: "html", Content: htmlBody}}, nil
 }
 
 // SendImageMessage posts a chat message with an inline image. Teams carries
