@@ -76,6 +76,30 @@ func TestRefreshEmojiPickerTrigger(t *testing.T) {
 	}
 }
 
+func TestAutoReplaceEmoticon(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"smiley", "hello :-)", "hello 🙂"},
+		{"heart", "love <3", "love ❤️"},
+		{"emoticon at start", ":-)", "🙂"},
+		{"no emoticon untouched", "hello :", "hello :"},
+		{"incomplete emoticon untouched", "hello :-", "hello :-"},
+		{"text after emoticon not replaced", ":-) ok", ":-) ok"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newComposeModel(tt.value)
+			m.autoReplaceEmoticon()
+			if got := m.compose.Value(); got != tt.want {
+				t.Errorf("value = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestApplyEmojiSelection(t *testing.T) {
 	m := newComposeModel("hi :thu")
 	m.refreshEmojiPicker()

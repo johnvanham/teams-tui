@@ -63,3 +63,38 @@ func TestMatchShortcodePrefix(t *testing.T) {
 		}
 	})
 }
+
+func TestMatchEmoticonSuffix(t *testing.T) {
+	tests := []struct {
+		name      string
+		in        string
+		wantGlyph string
+		wantLen   int
+		wantOK    bool
+	}{
+		{"smiley at end", "hello :-)", "🙂", 3, true},
+		{"smiley at start", ":-)", "🙂", 3, true},
+		{"heart", "love <3", "❤️", 2, true},
+		{"longest wins", "hi :-)", "🙂", 3, true},
+		{"no boundary before (inside word)", "http://", "", 0, false},
+		{"not an emoticon", "just text", "", 0, false},
+		{"emoticon not at end", ":-) more", "", 0, false},
+		{"shrug", "ok \\o/", "🙌", 3, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			glyph, n, ok := MatchEmoticonSuffix(tt.in)
+			if ok != tt.wantOK {
+				t.Fatalf("ok = %v, want %v (glyph=%q len=%d)", ok, tt.wantOK, glyph, n)
+			}
+			if ok {
+				if glyph != tt.wantGlyph {
+					t.Errorf("glyph = %q, want %q", glyph, tt.wantGlyph)
+				}
+				if n != tt.wantLen {
+					t.Errorf("matchLen = %d, want %d", n, tt.wantLen)
+				}
+			}
+		})
+	}
+}

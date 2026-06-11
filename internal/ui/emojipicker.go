@@ -154,3 +154,46 @@ func (m *Model) applyEmojiSelection() bool {
 	m.closeEmojiPicker()
 	return true
 }
+
+// autoReplaceEmoticon converts a classic text emoticon (":-)", "<3", …) to its
+// Unicode glyph the moment it is completed at the cursor, mirroring the desktop
+// Teams client's inline auto-replace. It inspects the current line up to the
+// cursor; if it ends with a recognized emoticon (preceded by whitespace or the
+// line start), the emoticon is swapped for the glyph and the cursor is left
+// just after it. No-ops otherwise, so it is safe to call after every keystroke.
+func (m *Model) autoReplaceEmoticon() {
+	line := m.currentComposeLine()
+	col := m.compose.Column()
+	runes := []rune(line)
+	if col > len(runes) {
+		col = len(runes)
+	}
+	before := string(runes[:col])
+
+	glyph, matchLen, ok := graph.MatchEmoticonSuffix(before)
+	if !ok {
+		return
+	}
+	// matchLen is a byte length into `before`; convert the matched emoticon to a
+	// rune count so we can splice on the rune-indexed line.
+	emoticon := before[len(before)-matchLen:]
+	emoticonRunes := len([]rune(emoticon))
+	startCol := col - emoticonRunes
+
+	lines := strings.Split(m.compose.Value(), "\n")
+	row := m.compose.Line()
+	if row < 0 || row >= len(lines) {
+		return
+	}
+	newLine := string(runes[:startCol]) + glyph + string(runes[col:])
+	lines[row] = newLine
+	m.compose.SetValue(strings.Join(lines, "\n"))
+
+	// SetValue parks the cursor at the buffer end; walk it back to just after
+	// the inserted glyph.
+	m.compose.MoveToBegin()
+	for i := 0; i < row; i++ {
+		m.compose.CursorDown()
+	}
+	m.compose.SetCursorColumn(startCol + len([]rune(glyph)))
+}

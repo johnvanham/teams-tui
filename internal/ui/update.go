@@ -517,6 +517,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			focusCmd := m.compose.Focus()
 			var cmd tea.Cmd
 			m.compose, cmd = m.compose.Update(msg)
+			m.autoReplaceEmoticon()
 			m.refreshEmojiPicker()
 			m.layout() // grow the box to fit the new content
 			return m, tea.Batch(focusCmd, cmd)
@@ -549,7 +550,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.compose, cmd = m.compose.Update(msg)
-		// Re-evaluate the inline emoji suggestions against the new text.
+		// Auto-replace a completed text emoticon (":-)" -> "🙂") inline, then
+		// re-evaluate the :shortcode: autocomplete suggestions against the new
+		// text.
+		m.autoReplaceEmoticon()
 		m.refreshEmojiPicker()
 		// Recompute layout so the compose box grows/shrinks with its content.
 		m.layout()

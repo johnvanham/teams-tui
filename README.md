@@ -27,11 +27,12 @@ is about to start.
 - **Chats only, done well:** one-to-one, multi-person group, and meeting chats.
 - **Live updates** via lightweight polling of Microsoft Graph.
 - **Send messages** inline from the compose box.
-- **Emoji:** incoming Teams emoji render as Unicode glyphs. When composing, type
-  a shortcode (`:thumbsup:`) or a classic emoticon (`:-)`, `<3`) and it is
-  converted to the emoji on send. Typing `:` followed by at least two characters
-  opens an inline picker above the compose box (`↑`/`↓` to select, `tab`/`enter`
-  to insert, `esc` to dismiss) without interrupting your typing.
+- **Emoji:** incoming Teams emoji render as Unicode glyphs. When composing,
+  classic emoticons (`:-)`, `<3`, `:D`) are auto-replaced with the emoji as you
+  type, like the desktop client. Typing `:` followed by at least two characters
+  opens an inline shortcode picker (`:thumbsup:`) above the compose box (`↑`/`↓`
+  to select, `tab`/`enter` to insert, `esc` to dismiss) without interrupting
+  your typing.
 - **Presence:** see each participant's Teams status next to their name, and set
   your own status from a popup (`ctrl+s`). While running, the app maintains a
   presence session so your chosen status persists like a native client.

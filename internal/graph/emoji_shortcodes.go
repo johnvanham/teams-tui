@@ -216,11 +216,16 @@ var emoticonEmoji = map[string]string{
 // at least one inner character so a bare "::" is left alone.
 var shortcodeRe = regexp.MustCompile(`:([a-zA-Z0-9_+-]+):`)
 
+// emoticonKeys lists every emoticon, longest first (ties lexical), so callers
+// that try matches in order resolve overlaps (":-)" before ":)") to the longer
+// emoticon.
+var emoticonKeys = sortedEmoticonKeys()
+
 // emoticonReplacer is built once from emoticonEmoji with the longest emoticons
 // first, so overlapping prefixes (":-)" vs ":)") resolve to the longer match.
 var emoticonReplacer = buildEmoticonReplacer()
 
-func buildEmoticonReplacer() *strings.Replacer {
+func sortedEmoticonKeys() []string {
 	keys := make([]string, 0, len(emoticonEmoji))
 	for k := range emoticonEmoji {
 		keys = append(keys, k)
@@ -232,8 +237,12 @@ func buildEmoticonReplacer() *strings.Replacer {
 		}
 		return keys[i] < keys[j]
 	})
-	pairs := make([]string, 0, len(keys)*2)
-	for _, k := range keys {
+	return keys
+}
+
+func buildEmoticonReplacer() *strings.Replacer {
+	pairs := make([]string, 0, len(emoticonKeys)*2)
+	for _, k := range emoticonKeys {
 		pairs = append(pairs, k, emoticonEmoji[k])
 	}
 	return strings.NewReplacer(pairs...)
@@ -286,4 +295,36 @@ func MatchShortcodePrefix(prefix string, limit int) []EmojiShortcode {
 		out = out[:limit]
 	}
 	return out
+}
+
+// MatchEmoticonSuffix reports whether text ends with a recognized ASCII
+// emoticon (e.g. ":-)" or "<3") and, if so, returns the emoticon's Unicode
+// glyph and the byte length of the matched emoticon. It is used for live,
+// as-you-type conversion in the composer: a caller checks the text up to the
+// cursor after each keystroke and, on a match, replaces the trailing emoticon
+// with the glyph.
+//
+// To avoid mangling words and URLs (e.g. "http://"), a match only counts when
+// the character immediately before the emoticon is whitespace or the start of
+// the text. The longest emoticon wins (emoticonKeys is longest-first).
+func MatchEmoticonSuffix(text string) (glyph string, matchLen int, ok bool) {
+	for _, k := range emoticonKeys {
+		if !strings.HasSuffix(text, k) {
+			continue
+		}
+		before := text[:len(text)-len(k)]
+		if before == "" || endsWithSpace(before) {
+			return emoticonEmoji[k], len(k), true
+		}
+	}
+	return "", 0, false
+}
+
+// endsWithSpace reports whether s ends in a space or tab.
+func endsWithSpace(s string) bool {
+	if s == "" {
+		return false
+	}
+	c := s[len(s)-1]
+	return c == ' ' || c == '\t' || c == '\n'
 }
