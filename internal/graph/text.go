@@ -29,6 +29,10 @@ func (b MessageBody) PlainText() string {
 		content = strings.ReplaceAll(content, "<li>", "\n- ")
 		content = strings.ReplaceAll(content, "<LI>", "\n- ")
 
+		// Resolve Teams <emoji> elements to their Unicode characters before the
+		// generic tag strip below, which would otherwise discard them.
+		content = replaceEmojiTags(content)
+
 		// End each block element with a single newline. A single <p>...</p> is
 		// therefore one line; an explicit empty paragraph (<p>&nbsp;</p>)
 		// becomes a whitespace-only line that normalizeWhitespace turns into a

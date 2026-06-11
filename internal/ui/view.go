@@ -549,8 +549,10 @@ func wrapLine(line string, width int) string {
 	}
 	var b strings.Builder
 	cur := 0
-	for i, w := range words {
-		wl := len(w)
+	for _, w := range words {
+		// Use display width (not byte length) so wide glyphs such as emoji,
+		// which occupy two terminal cells, wrap correctly.
+		wl := ansi.StringWidth(w)
 		if cur == 0 {
 			b.WriteString(w)
 			cur = wl
@@ -565,7 +567,6 @@ func wrapLine(line string, width int) string {
 			b.WriteString(w)
 			cur += 1 + wl
 		}
-		_ = i
 	}
 	return b.String()
 }
