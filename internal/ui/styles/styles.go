@@ -138,4 +138,8 @@ var (
 
 	// Hint is dim helper text.
 	Hint = lipgloss.NewStyle().Foreground(Grey)
+
+	// UnreadDot colours the leading marker on a chat with unread messages so
+	// it stands out against already-read chats.
+	UnreadDot = lipgloss.NewStyle().Foreground(PurpleLt).Bold(true)
 )

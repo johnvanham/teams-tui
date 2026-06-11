@@ -219,6 +219,25 @@ func (c *Client) ListChats(ctx context.Context, top int) ([]Chat, error) {
 	return resp.Value, nil
 }
 
+// MarkChatRead marks a chat as read for the signed-in user, advancing the
+// server-side viewpoint.lastMessageReadDateTime so the chat stops showing as
+// unread (here and on the user's other devices). It POSTs to the
+// markChatReadForUser action with the user's own id as the user reference.
+// Graph responds 204 No Content on success.
+func (c *Client) MarkChatRead(ctx context.Context, chatID, userID string) error {
+	payload := map[string]any{
+		"user": map[string]string{
+			"id": userID,
+		},
+	}
+	buf, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	path := fmt.Sprintf("/chats/%s/markChatReadForUser", url.PathEscape(chatID))
+	return c.do(ctx, http.MethodPost, path, bytes.NewReader(buf), nil, nil)
+}
+
 // ListPeople returns contacts relevant to the signed-in user via GET
 // /me/people, powering the "start new chat" people picker. When search is
 // non-empty it adds a $search filter (Graph requires the value to be wrapped in

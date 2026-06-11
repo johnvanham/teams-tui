@@ -128,6 +128,42 @@ type Chat struct {
 	LastUpdatedDateTime time.Time            `json:"lastUpdatedDateTime"`
 	Members             []ConversationMember `json:"members"`
 	LastMessagePreview  *MessagePreview      `json:"lastMessagePreview"`
+	Viewpoint           *ChatViewpoint       `json:"viewpoint"`
+}
+
+// ChatViewpoint carries the signed-in user's per-chat state, notably the read
+// horizon used to compute unread chats. Graph returns it by default on
+// /me/chats. LastMessageReadDateTime is the createdDateTime of the newest
+// message the user has read in this chat.
+type ChatViewpoint struct {
+	IsHidden                bool      `json:"isHidden"`
+	LastMessageReadDateTime time.Time `json:"lastMessageReadDateTime"`
+}
+
+// Unread reports whether the chat has messages the signed-in user hasn't read
+// yet. A chat is unread when its last message is newer than the read horizon
+// and was not sent by the user themselves (your own sends never count as
+// unread). readHorizon overrides the server's viewpoint when non-zero, letting
+// the caller reflect a just-opened chat as read before the server catches up.
+func (c *Chat) Unread(selfID string, readHorizon time.Time) bool {
+	if c.LastMessagePreview == nil {
+		return false
+	}
+	last := c.LastMessagePreview.CreatedAt
+	if last.IsZero() {
+		return false
+	}
+	// Don't flag our own latest message as unread.
+	if from := c.LastMessagePreview.From; from != nil && from.User != nil &&
+		selfID != "" && from.User.ID == selfID {
+		return false
+	}
+	// Use the later of the server's read marker and any local override.
+	read := readHorizon
+	if c.Viewpoint != nil && c.Viewpoint.LastMessageReadDateTime.After(read) {
+		read = c.Viewpoint.LastMessageReadDateTime
+	}
+	return last.After(read)
 }
 
 // LastActivity returns the most recent activity time for ordering the chat

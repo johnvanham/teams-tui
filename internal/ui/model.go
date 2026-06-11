@@ -88,6 +88,7 @@ type Model struct {
 	nextLink       map[string]string         // chat ID -> @odata.nextLink (older msgs)
 	loadingMore    map[string]bool           // chat ID -> older-page fetch in flight
 	lastSync       map[string]time.Time      // chat ID -> newest lastModified seen
+	readUntil      map[string]time.Time      // chat ID -> local read horizon (mark-as-read)
 	chatsSig       string                    // signature of the rendered chat list
 	people         []graph.Person            // contacts currently shown in the sidebar
 	convImages     []graph.ImageRef          // images in the open chat, display order
@@ -115,11 +116,7 @@ type Model struct {
 func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *auth.Store, n *notify.Notifier) Model {
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 
-	delegate := list.NewDefaultDelegate()
-	delegate.SetHeight(2)
-	delegate.SetSpacing(1)
-
-	l := list.New(nil, delegate, 0, 0)
+	l := list.New(nil, newChatDelegate(), 0, 0)
 	l.Title = "Chats"
 	l.SetShowHelp(false)
 	l.SetShowStatusBar(false)
@@ -189,6 +186,7 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 		nextLink:     make(map[string]string),
 		loadingMore:  make(map[string]bool),
 		lastSync:     make(map[string]time.Time),
+		readUntil:    make(map[string]time.Time),
 		focused:      true, // assume focused until told otherwise
 		alerted:      make(map[string]bool),
 	}

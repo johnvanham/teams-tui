@@ -412,6 +412,17 @@ func clearSessionCmd(ctx context.Context, c *graph.Client, userID, sessionID str
 	}
 }
 
+// markChatReadCmd marks a chat as read on the server (best-effort, fire and
+// forget). The unread highlight is already cleared locally when the chat opens,
+// so a failure here only means the read state won't sync to other devices until
+// the next read; we therefore swallow the error.
+func markChatReadCmd(ctx context.Context, c *graph.Client, chatID, userID string) tea.Cmd {
+	return func() tea.Msg {
+		_ = c.MarkChatRead(ctx, chatID, userID)
+		return nil
+	}
+}
+
 // pollTickCmd schedules the next chat/message refresh.
 func pollTickCmd(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(t time.Time) tea.Msg { return pollTickMsg(t) })

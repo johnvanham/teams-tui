@@ -578,28 +578,18 @@ func (m Model) handleChats(msg chatsMsg) (tea.Model, tea.Cmd) {
 		return chats[i].ID < chats[j].ID
 	})
 
-	self := m.selfID()
-	items := make([]list.Item, 0, len(chats))
+	// Record the chats (and their order) into the model, then let
+	// rebuildChatList construct the list items and recompute unread state from
+	// the same single place used for between-poll refreshes.
 	m.chatOrder = m.chatOrder[:0]
-	var sig strings.Builder
 	for _, c := range chats {
 		// Graph does not guarantee a stable member order across polls, which
 		// made the participant header and chat names jump around. Sort members
 		// deterministically (by display name, then user ID) so the order is
 		// stable between refreshes.
 		sortMembers(c.Members)
-		item := newChatItem(c, self)
-		items = append(items, item)
 		m.chatOrder = append(m.chatOrder, c.ID)
 		m.chats[c.ID] = c
-		// Build a signature of exactly what the list displays so we can skip
-		// rebuilding it (the expensive part) when nothing visible changed.
-		sig.WriteString(c.ID)
-		sig.WriteByte('\x1f')
-		sig.WriteString(item.Title())
-		sig.WriteByte('\x1f')
-		sig.WriteString(item.Description())
-		sig.WriteByte('\x1e')
 	}
 
 	// A successful chat refresh clears any stale transient error in the status
@@ -608,12 +598,7 @@ func (m Model) handleChats(msg chatsMsg) (tea.Model, tea.Cmd) {
 
 	// Only rebuild the list when the displayed chats actually changed; this
 	// avoids the per-poll cost of SetItems (pagination + delegate work).
-	newSig := sig.String()
-	var cmd tea.Cmd
-	if newSig != m.chatsSig {
-		m.chatsSig = newSig
-		cmd = m.list.SetItems(items)
-	}
+	cmd := m.rebuildChatList()
 
 	if m.phase == phaseLoading {
 		m.phase = phaseReady
@@ -751,6 +736,10 @@ func (m Model) handleMessages(msg messagesMsg) (tea.Model, tea.Cmd) {
 	m.messages[msg.chatID] = merged
 
 	if msg.chatID == m.currentChat {
+		// The user is looking at this chat, so anything that just arrived is
+		// considered read. Advance the local read horizon past the newest
+		// message so the chat won't flash unread once they switch away.
+		m.advanceRead(msg.chatID, msg.messages)
 		atBottom := m.viewport.AtBottom()
 		m.renderConversation()
 		if atBottom {
@@ -758,6 +747,21 @@ func (m Model) handleMessages(msg messagesMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// advanceRead moves a chat's local read horizon past the newest message in
+// msgs. Used while a chat is open so incoming messages the user is actively
+// viewing don't later resurface as unread.
+func (m *Model) advanceRead(chatID string, msgs []graph.Message) {
+	newest := m.readUntil[chatID]
+	for _, msg := range msgs {
+		if msg.CreatedAt.After(newest) {
+			newest = msg.CreatedAt
+		}
+	}
+	if newest.After(m.readUntil[chatID]) {
+		m.readUntil[chatID] = newest
+	}
 }
 
 // advanceSync records the newest lastModifiedDateTime seen for a chat so the
@@ -1115,12 +1119,67 @@ func (m Model) viewImageAt(idx int) (tea.Model, tea.Cmd) {
 // messages plus participant presence.
 func (m *Model) openChat(chatID string) tea.Cmd {
 	m.currentChat = chatID
+	// Opening a chat marks it read: advance the local read horizon past its
+	// latest message so the unread highlight clears immediately, before the
+	// server viewpoint catches up on the next poll. Persist the read state to
+	// the server too so it syncs across devices.
+	var readCmd tea.Cmd
+	if c, ok := m.chats[chatID]; ok {
+		horizon := c.LastActivity()
+		if horizon.After(m.readUntil[chatID]) {
+			m.readUntil[chatID] = horizon
+		}
+		if self := m.selfID(); self != "" {
+			readCmd = markChatReadCmd(m.ctx, m.client, chatID, self)
+		}
+	}
+	listCmd := m.rebuildChatList()
 	m.renderConversation()
 	m.viewport.GotoBottom()
 	return tea.Batch(
+		listCmd,
 		loadMessagesCmd(m.ctx, m.client, chatID),
 		loadPresencesCmd(m.ctx, m.client, m.currentChatParticipantIDs()),
+		readCmd,
 	)
+}
+
+// rebuildChatList regenerates the chat list items from the cached chats in
+// m.chatOrder, recomputing each chat's unread state. It returns the list's
+// SetItems command (or nil when nothing visibly changed, keyed off chatsSig).
+// Use it to refresh unread highlighting between polls, e.g. right after opening
+// a chat marks it read.
+func (m *Model) rebuildChatList() tea.Cmd {
+	self := m.selfID()
+	items := make([]list.Item, 0, len(m.chatOrder))
+	var sig strings.Builder
+	for _, id := range m.chatOrder {
+		c, ok := m.chats[id]
+		if !ok {
+			continue
+		}
+		unread := id != m.currentChat && c.Unread(self, m.readUntil[id])
+		item := newChatItem(c, self, unread)
+		items = append(items, item)
+		sig.WriteString(c.ID)
+		sig.WriteByte('\x1f')
+		sig.WriteString(item.Title())
+		sig.WriteByte('\x1f')
+		sig.WriteString(item.Description())
+		sig.WriteByte('\x1f')
+		if unread {
+			sig.WriteByte('1')
+		} else {
+			sig.WriteByte('0')
+		}
+		sig.WriteByte('\x1e')
+	}
+	newSig := sig.String()
+	if newSig == m.chatsSig {
+		return nil
+	}
+	m.chatsSig = newSig
+	return m.list.SetItems(items)
 }
 
 func (m Model) trySend() (tea.Model, tea.Cmd) {
