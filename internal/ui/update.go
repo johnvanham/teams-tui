@@ -428,7 +428,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// View an image: opens the most recent image in the conversation in the OS
 	// default viewer/browser. Available from any pane so it doesn't fight the
-	// compose box's text input (ctrl+v isn't a printable key).
+	// compose box's text input (ctrl+y isn't a printable key, and ctrl+v is
+	// left free for terminal paste).
 	if key.Matches(msg, m.keys.Image) {
 		return m.viewImage()
 	}

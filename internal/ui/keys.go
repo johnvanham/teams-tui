@@ -55,8 +55,8 @@ func defaultKeyMap() keyMap {
 			key.WithHelp("ctrl+e", "edit last message"),
 		),
 		Image: key.NewBinding(
-			key.WithKeys("ctrl+v"),
-			key.WithHelp("ctrl+v", "view image"),
+			key.WithKeys("ctrl+y"),
+			key.WithHelp("ctrl+y", "view image"),
 		),
 		Up: key.NewBinding(
 			key.WithKeys("up", "k"),

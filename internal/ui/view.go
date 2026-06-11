@@ -494,7 +494,7 @@ func (m *Model) renderConversation() {
 			if label == "" {
 				label = "image"
 			}
-			placeholder := fmt.Sprintf("🖼  [%d] %s — ctrl+v / click to view", idx+1, label)
+			placeholder := fmt.Sprintf("🖼  [%d] %s — ctrl+y / click to view", idx+1, label)
 			b.WriteString(styles.ImagePlaceholder.Render(placeholder))
 			b.WriteString("\n")
 			m.imageLines[line] = idx
