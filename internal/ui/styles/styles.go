@@ -156,6 +156,29 @@ var (
 			Foreground(Orange).
 			Padding(0, 0, 0, 2)
 
+	// CodeBlockBg is the dim background behind fenced code blocks in messages.
+	CodeBlockBg = lipgloss.Color("#15151F")
+
+	// CodeBlock styles a multi-line fenced code block in a conversation. Each
+	// line is padded to the block width so the background reads as one solid
+	// panel; whitespace inside is preserved by the renderer (no reflow).
+	CodeBlock = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#C8C8D8")).
+			Background(CodeBlockBg).
+			Padding(0, 1)
+
+	// CodeBlockLang labels the language on the top border of a code block.
+	CodeBlockLang = lipgloss.NewStyle().
+			Foreground(PurpleLt).
+			Background(CodeBlockBg).
+			Bold(true).
+			Padding(0, 1)
+
+	// InlineCode highlights a `backtick` snippet within prose.
+	InlineCode = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#E0E0F0")).
+			Background(CodeBlockBg)
+
 	// EmojiPicker frames the inline emoji autocomplete popup shown above the
 	// compose box while typing a :shortcode:.
 	EmojiPicker = lipgloss.NewStyle().

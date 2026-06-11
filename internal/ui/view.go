@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"image/color"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -540,10 +541,10 @@ func (m *Model) renderConversation() {
 		b.WriteString("\n")
 		line++ // header row
 		if text != "" {
-			wrapped := wrap(text, width)
-			b.WriteString(wrapped)
+			rendered := renderBody(text, width)
+			b.WriteString(rendered)
 			b.WriteString("\n")
-			line += strings.Count(wrapped, "\n") + 1
+			line += strings.Count(rendered, "\n") + 1
 		}
 		// Render a numbered placeholder for each image; the number matches the
 		// index used by the "view image" action (1-based for humans). Record
@@ -572,16 +573,105 @@ func (m *Model) renderConversation() {
 	m.viewport.SetContent(strings.TrimRight(b.String(), "\n"))
 }
 
-// wrap performs simple word wrapping at the given width.
-func wrap(s string, width int) string {
-	if width <= 0 {
-		return s
-	}
+// codeFence is the marker line graph.MessageBody.PlainText emits around code
+// blocks (a Markdown triple backtick, with an optional language on the opening
+// fence). renderBody keys off it to style code distinctly from prose.
+const codeFence = "```"
+
+// renderBody renders a converted message body, styling fenced code blocks and
+// inline `backtick` snippets distinctly from prose. Prose lines are
+// word-wrapped to width; code blocks are shown verbatim (no reflow) on a dim
+// panel, clamped to width. The result is a single string ready for the
+// viewport.
+func renderBody(text string, width int) string {
+	lines := strings.Split(text, "\n")
 	var out []string
-	for _, line := range strings.Split(s, "\n") {
-		out = append(out, wrapLine(line, width))
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		// An opening fence (```​ or ```lang) starts a code block that runs until
+		// the matching closing fence (or end of text if Teams sent a malformed
+		// block).
+		if strings.HasPrefix(line, codeFence) {
+			lang := strings.TrimSpace(strings.TrimPrefix(line, codeFence))
+			var code []string
+			i++
+			for ; i < len(lines); i++ {
+				if strings.HasPrefix(lines[i], codeFence) {
+					break
+				}
+				code = append(code, lines[i])
+			}
+			out = append(out, renderCodeBlock(code, lang, width))
+			continue
+		}
+		out = append(out, wrapLineInline(line, width))
 	}
 	return strings.Join(out, "\n")
+}
+
+// renderCodeBlock styles a code block's lines as one dim panel. Each line is
+// padded to a uniform inner width so the background forms a solid rectangle;
+// lines wider than the available space are truncated with an ellipsis (code is
+// not reflowed). An optional language label sits on a header row.
+func renderCodeBlock(code []string, lang string, width int) string {
+	// Inner width available for code text inside the style's horizontal padding
+	// (1 cell each side).
+	inner := width - 2
+	if inner < 1 {
+		inner = 1
+	}
+
+	// Determine the panel width from the widest line, clamped to the viewport,
+	// so short snippets don't stretch the full width.
+	panel := 0
+	for _, c := range code {
+		if w := ansi.StringWidth(c); w > panel {
+			panel = w
+		}
+	}
+	if lang != "" && panel < ansi.StringWidth(lang) {
+		panel = ansi.StringWidth(lang)
+	}
+	if panel > inner {
+		panel = inner
+	}
+	if panel < 1 {
+		panel = 1
+	}
+
+	var rows []string
+	if lang != "" {
+		rows = append(rows, styles.CodeBlockLang.Width(panel+2).Render(lang))
+	}
+	for _, c := range code {
+		if ansi.StringWidth(c) > panel {
+			c = ansi.Truncate(c, panel, "…")
+		}
+		rows = append(rows, styles.CodeBlock.Width(panel+2).Render(c))
+	}
+	if len(rows) == 0 {
+		// Empty block: render a single blank padded row so it's still visible.
+		rows = append(rows, styles.CodeBlock.Width(panel+2).Render(""))
+	}
+	return strings.Join(rows, "\n")
+}
+
+// inlineCodeRe matches a `backtick` span within prose so it can be styled.
+var inlineCodeRe = regexp.MustCompile("`([^`]+)`")
+
+// wrapLineInline word-wraps a prose line to width, then re-styles any
+// `backtick` spans on it with the inline-code style. Wrapping happens first
+// (on the plain text, so widths are correct) and styling is applied to the
+// wrapped output, which keeps the backtick markers intact across line breaks.
+func wrapLineInline(line string, width int) string {
+	wrapped := wrapLine(line, width)
+	if !strings.Contains(wrapped, "`") {
+		return wrapped
+	}
+	return inlineCodeRe.ReplaceAllStringFunc(wrapped, func(m string) string {
+		inner := strings.Trim(m, "`")
+		return styles.InlineCode.Render(inner)
+	})
 }
 
 func wrapLine(line string, width int) string {

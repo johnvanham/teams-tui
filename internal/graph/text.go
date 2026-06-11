@@ -17,7 +17,13 @@ var (
 // blank line between paragraphs, matching the native Teams client).
 func (b MessageBody) PlainText() string {
 	content := b.Content
+	var codeBlocks map[string]string
 	if strings.EqualFold(b.ContentType, "html") {
+		// Pull code blocks and inline code out first, leaving placeholders in
+		// their place. They are restored verbatim after whitespace
+		// normalization so their indentation and blank lines are preserved.
+		content, codeBlocks = extractCodeBlocks(content)
+
 		// Explicit line breaks.
 		brReplacer := strings.NewReplacer(
 			"<br>", "\n", "<br/>", "\n", "<br />", "\n",
@@ -50,7 +56,8 @@ func (b MessageBody) PlainText() string {
 		content = html.UnescapeString(content)
 	}
 
-	return normalizeWhitespace(content)
+	content = normalizeWhitespace(content)
+	return restoreCodeBlocks(content, codeBlocks)
 }
 
 // normalizeWhitespace tidies the converted text: trims each line, replaces
