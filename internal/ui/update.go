@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/jvh/teams-tui/internal/clipboard"
 	"github.com/jvh/teams-tui/internal/graph"
 )
 
@@ -115,9 +117,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case sentMsg:
 		m.compose.Reset()
+		m.clearPendingImage()
 		m.layout() // shrink the compose box back to its minimum
 		// Immediately refresh the affected chat for snappy feedback.
 		return m, loadMessagesCmd(m.ctx, m.client, msg.chatID)
+
+	case imagePastedMsg:
+		if msg.err != nil {
+			if errors.Is(msg.err, clipboard.ErrNoImage) {
+				m.errText = "No image on the clipboard to paste."
+			} else {
+				m.errText = "Couldn't read clipboard: " + msg.err.Error()
+			}
+			return m, nil
+		}
+		m.pendingImage = msg.data
+		m.pendingImageCT = msg.contentType
+		// Move focus to the compose box so the user can add a caption and send.
+		m.focus = focusCompose
+		m.errText = ""
+		return m, m.compose.Focus()
 
 	case peopleMsg:
 		return m.handlePeople(msg)
@@ -428,8 +447,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// View an image: opens the most recent image in the conversation in the OS
 	// default viewer/browser. Available from any pane so it doesn't fight the
-	// compose box's text input (ctrl+y isn't a printable key, and ctrl+v is
-	// left free for terminal paste).
+	// compose box's text input (ctrl+y isn't a printable key, so it's safe to
+	// bind even while composing).
 	if key.Matches(msg, m.keys.Image) {
 		return m.viewImage()
 	}
@@ -438,6 +457,18 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// in-place edit. Available from any pane.
 	if key.Matches(msg, m.keys.Edit) {
 		return m.startEdit()
+	}
+
+	// Paste image: read an image from the OS clipboard and stage it for the
+	// next send. The compose text (if any) becomes the image's caption. Only
+	// meaningful with a chat open; we can't paste a binary image into the text
+	// composer, so this is handled here rather than falling through to it.
+	if key.Matches(msg, m.keys.Paste) {
+		if m.currentChat == "" {
+			return m, nil
+		}
+		m.errText = "Reading clipboard…"
+		return m, pasteImageCmd()
 	}
 
 	switch {
@@ -474,6 +505,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// fresh (new-message) state.
 		if m.editingMsgID != "" && msg.String() == "esc" {
 			m.cancelEdit()
+			return m, nil
+		}
+		// Esc also discards a staged clipboard image (when not editing).
+		if len(m.pendingImage) > 0 && msg.String() == "esc" {
+			m.clearPendingImage()
 			return m, nil
 		}
 		if key.Matches(msg, m.keys.Send) {
@@ -1089,10 +1125,27 @@ func (m *Model) openChat(chatID string) tea.Cmd {
 
 func (m Model) trySend() (tea.Model, tea.Cmd) {
 	text := strings.TrimSpace(m.compose.Value())
-	if text == "" || m.currentChat == "" {
+	if m.currentChat == "" {
 		return m, nil
 	}
 	chatID := m.currentChat
+
+	// A staged clipboard image takes precedence: post it as an inline image,
+	// using any typed text as the caption. Editing an existing message and
+	// attaching an image are mutually exclusive, so this is checked first.
+	if len(m.pendingImage) > 0 {
+		img := m.pendingImage
+		ct := m.pendingImageCT
+		m.clearPendingImage()
+		m.compose.Reset()
+		m.editingMsgID = ""
+		m.layout()
+		return m, sendImageCmd(m.ctx, m.client, chatID, img, ct, text)
+	}
+
+	if text == "" {
+		return m, nil
+	}
 	// If we're editing an existing message, PATCH it instead of posting a new
 	// one, then leave edit mode.
 	if m.editingMsgID != "" {
@@ -1125,6 +1178,12 @@ func (m Model) startEdit() (tea.Model, tea.Cmd) {
 	m.compose.SetValue(msg.Body.PlainText())
 	m.layout()
 	return m, m.compose.Focus()
+}
+
+// clearPendingImage discards any clipboard image staged for the next send.
+func (m *Model) clearPendingImage() {
+	m.pendingImage = nil
+	m.pendingImageCT = ""
 }
 
 // cancelEdit leaves edit mode and clears the compose box.

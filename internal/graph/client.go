@@ -6,8 +6,10 @@ package graph
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -403,6 +405,58 @@ func (c *Client) EditMessage(ctx context.Context, chatID, messageID, text string
 		return nil, err
 	}
 	return &Message{ID: messageID, Body: MessageBody{ContentType: "text", Content: text}}, nil
+}
+
+// SendImageMessage posts a chat message with an inline image. Teams carries
+// inline images as "hosted content": the image bytes are base64-encoded into a
+// hostedContents entry tagged with a temporary id, and the HTML body references
+// them via <img src="../hostedContents/{tempID}/$value">. An optional caption is
+// rendered above the image. contentType is the image MIME type (e.g.
+// "image/png"); it defaults to image/png when empty.
+//
+// This still posts JSON to the same endpoint as SendMessage, so it funnels
+// through do() unchanged.
+func (c *Client) SendImageMessage(ctx context.Context, chatID string, img []byte, contentType, caption string) (*Message, error) {
+	if len(img) == 0 {
+		return nil, fmt.Errorf("SendImageMessage: empty image")
+	}
+	if contentType == "" {
+		contentType = "image/png"
+	}
+
+	const tempID = "1"
+	var content bytes.Buffer
+	content.WriteString("<div>")
+	if caption != "" {
+		// Escape so a caption that happens to contain HTML is shown literally.
+		content.WriteString("<p>" + html.EscapeString(caption) + "</p>")
+	}
+	fmt.Fprintf(&content, `<img src="../hostedContents/%s/$value" alt="image">`, tempID)
+	content.WriteString("</div>")
+
+	payload := map[string]any{
+		"body": map[string]string{
+			"contentType": "html",
+			"content":     content.String(),
+		},
+		"hostedContents": []map[string]any{
+			{
+				"@microsoft.graph.temporaryId": tempID,
+				"contentBytes":                 base64.StdEncoding.EncodeToString(img),
+				"contentType":                  contentType,
+			},
+		},
+	}
+	buf, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	path := fmt.Sprintf("/me/chats/%s/messages", url.PathEscape(chatID))
+	var msg Message
+	if err := c.do(ctx, http.MethodPost, path, bytes.NewReader(buf), nil, &msg); err != nil {
+		return nil, err
+	}
+	return &msg, nil
 }
 
 // FetchHostedContent downloads the raw bytes of an inline/hosted image so it can

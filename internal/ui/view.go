@@ -346,6 +346,21 @@ func (m Model) presenceGlyph(userID string, bg color.Color) string {
 	return lipgloss.NewStyle().Background(bg).Foreground(fg).Render(glyph)
 }
 
+// humanBytes formats a byte count as a short human-readable string (e.g.
+// "12 KB", "1.4 MB") for the attached-image indicator.
+func humanBytes(n int) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for v := int64(n) / unit; v >= unit; v /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
 // viewStatusPicker renders the status-selection popup centered on screen.
 func (m Model) viewStatusPicker() string {
 	box := styles.PopupBox.Render(m.statusPicker.View())
@@ -369,6 +384,10 @@ func (m Model) statusLine() string {
 	}
 	if m.editingMsgID != "" {
 		left = "EDITING (enter to save · esc to cancel)"
+	}
+	if len(m.pendingImage) > 0 {
+		left = fmt.Sprintf("IMAGE ATTACHED %s (enter to send · esc to discard)",
+			humanBytes(len(m.pendingImage)))
 	}
 	if m.errText != "" {
 		return styles.ErrorBanner.Width(m.width).Render(left + " · " + m.errText)

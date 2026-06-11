@@ -14,6 +14,7 @@ type keyMap struct {
 	Contacts key.Binding
 	Edit     key.Binding
 	Image    key.Binding
+	Paste    key.Binding
 	Help     key.Binding
 	Quit     key.Binding
 	Up       key.Binding
@@ -58,6 +59,10 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("ctrl+y"),
 			key.WithHelp("ctrl+y", "view image"),
 		),
+		Paste: key.NewBinding(
+			key.WithKeys("ctrl+v"),
+			key.WithHelp("ctrl+v", "paste image"),
+		),
 		Up: key.NewBinding(
 			key.WithKeys("up", "k"),
 			key.WithHelp("↑/k", "up"),
@@ -86,7 +91,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.NextPane, k.PrevPane},
-		{k.Send, k.Newline, k.Edit, k.Image},
+		{k.Send, k.Newline, k.Edit, k.Image, k.Paste},
 		{k.Contacts, k.Status, k.Refresh},
 		{k.Help, k.Quit},
 	}

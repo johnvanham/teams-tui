@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/jvh/teams-tui/internal/auth"
+	"github.com/jvh/teams-tui/internal/clipboard"
 	"github.com/jvh/teams-tui/internal/graph"
 	"github.com/jvh/teams-tui/internal/open"
 )
@@ -56,6 +57,15 @@ type messagesErrMsg struct {
 
 // sentMsg signals a message was sent successfully to a chat.
 type sentMsg struct{ chatID string }
+
+// imagePastedMsg carries an image read from the OS clipboard, ready to be
+// attached to the next outgoing message. err is set when the clipboard held no
+// image or the read failed.
+type imagePastedMsg struct {
+	data        []byte
+	contentType string
+	err         error
+}
 
 // editedMsg signals a message was edited successfully so the chat can refresh.
 type editedMsg struct {
@@ -230,6 +240,29 @@ func loadOlderMessagesCmd(ctx context.Context, c *graph.Client, chatID, nextLink
 func sendMessageCmd(ctx context.Context, c *graph.Client, chatID, text string) tea.Cmd {
 	return func() tea.Msg {
 		if _, err := c.SendMessage(ctx, chatID, text); err != nil {
+			return errMsg{err}
+		}
+		return sentMsg{chatID: chatID}
+	}
+}
+
+// pasteImageCmd reads an image from the OS clipboard so it can be attached to
+// the next outgoing message. Reading the clipboard may shell out to a helper
+// (wl-paste/xclip/osascript/powershell), so it runs off the UI goroutine.
+func pasteImageCmd() tea.Cmd {
+	return func() tea.Msg {
+		data, ct, err := clipboard.ReadImage()
+		if err != nil {
+			return imagePastedMsg{err: err}
+		}
+		return imagePastedMsg{data: data, contentType: ct}
+	}
+}
+
+// sendImageCmd posts an inline image (with an optional text caption) to a chat.
+func sendImageCmd(ctx context.Context, c *graph.Client, chatID string, img []byte, contentType, caption string) tea.Cmd {
+	return func() tea.Msg {
+		if _, err := c.SendImageMessage(ctx, chatID, img, contentType, caption); err != nil {
 			return errMsg{err}
 		}
 		return sentMsg{chatID: chatID}

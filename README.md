@@ -164,6 +164,7 @@ registration first if your tenant requires it.
 | `ctrl+o`       | Toggle the sidebar between Chats and Contacts (start a new chat) |
 | `ctrl+e`       | Edit your most recent message            |
 | `ctrl+y` / click | Open an image in your default viewer/browser (`ctrl+y` = newest; click a placeholder for that one) |
+| `ctrl+v`       | Paste an image from the clipboard and attach it to the next message (type a caption, then `enter` to send; `esc` to discard) |
 | `ctrl+r`       | Refresh now                              |
 | `ctrl+s`       | Open the status picker (set your presence) |
 | `ctrl+g`       | Toggle full help                         |
@@ -197,3 +198,9 @@ into the model. Polling is driven by `tea.Tick`.
   to open the newest one, or click a placeholder to open that specific image, in
   your OS default image viewer/browser (inline Graph hosted content is
   downloaded with your token first). Other attachment types are not yet rendered.
+- You can paste an image from the clipboard with `ctrl+v` to send it inline.
+  This shells out to a platform clipboard helper, so the relevant tool must be
+  installed: `wl-paste` (Wayland) or `xclip` (X11) on Linux, `osascript` on
+  macOS, and `powershell` on Windows. The image is sent as Teams hosted content
+  via `Chat.ReadWrite` (no extra scope required); any text you type becomes the
+  image's caption.

@@ -94,6 +94,8 @@ type Model struct {
 	imageLines     map[int]int               // viewport content line -> convImages index
 	openingImage   bool                      // an image download/open is in flight
 	editingMsgID   string                    // message ID being edited ("" if composing new)
+	pendingImage   []byte                    // image pasted from the clipboard, awaiting send
+	pendingImageCT string                    // MIME type of pendingImage (e.g. "image/png")
 	focused        bool                      // terminal window has focus
 	myPresence     *graph.Presence           // signed-in user's own presence
 	sessionID      string                    // app presence session ID (client ID)
