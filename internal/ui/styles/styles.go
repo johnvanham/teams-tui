@@ -155,4 +155,20 @@ var (
 	UnreadDesc = lipgloss.NewStyle().
 			Foreground(Orange).
 			Padding(0, 0, 0, 2)
+
+	// EmojiPicker frames the inline emoji autocomplete popup shown above the
+	// compose box while typing a :shortcode:.
+	EmojiPicker = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(Purple).
+			Padding(0, 1)
+
+	// EmojiPickerItem is a non-selected row in the emoji popup.
+	EmojiPickerItem = lipgloss.NewStyle().Foreground(LightGrey)
+
+	// EmojiPickerSelected highlights the active row in the emoji popup.
+	EmojiPickerSelected = lipgloss.NewStyle().
+				Foreground(White).
+				Background(Purple).
+				Bold(true)
 )

@@ -27,6 +27,11 @@ is about to start.
 - **Chats only, done well:** one-to-one, multi-person group, and meeting chats.
 - **Live updates** via lightweight polling of Microsoft Graph.
 - **Send messages** inline from the compose box.
+- **Emoji:** incoming Teams emoji render as Unicode glyphs. When composing, type
+  a shortcode (`:thumbsup:`) or a classic emoticon (`:-)`, `<3`) and it is
+  converted to the emoji on send. Typing `:` followed by at least two characters
+  opens an inline picker above the compose box (`↑`/`↓` to select, `tab`/`enter`
+  to insert, `esc` to dismiss) without interrupting your typing.
 - **Presence:** see each participant's Teams status next to their name, and set
   your own status from a popup (`ctrl+s`). While running, the app maintains a
   presence session so your chosen status persists like a native client.
@@ -160,6 +165,7 @@ registration first if your tenant requires it.
 | `↑`/`↓` `j`/`k`| Navigate the focused pane                |
 | `enter`        | Open selected chat (Chats) / send message (Compose) / start chat (Contacts) |
 | `alt+enter`    | Insert a newline in the compose box      |
+| `:` + 2 chars  | Open the inline emoji picker while composing (`↑`/`↓` select, `tab`/`enter` insert, `esc` close) |
 | `/`            | Filter the chat list / search contacts   |
 | `ctrl+o`       | Toggle the sidebar between Chats and Contacts (start a new chat) |
 | `ctrl+e`       | Edit your most recent message            |

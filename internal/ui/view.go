@@ -85,8 +85,10 @@ func (m *Model) layout() {
 		composeInnerH = composeMax
 	}
 	composeBoxH := composeInnerH + 2 // border
-	// Reserve one row for the participants/presence header above the messages.
-	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows
+	// Reserve one row for the participants/presence header above the messages,
+	// plus the inline emoji popup's rows when it is open (it sits between the
+	// messages and the compose box, stealing height from the viewport).
+	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight()
 	if vpInnerH < 1 {
 		vpInnerH = 1
 	}
@@ -240,7 +242,14 @@ func (m Model) viewReady() string {
 	}
 	compose := composeStyle.Width(boxW).Render(m.compose.View())
 
-	right := lipgloss.JoinVertical(lipgloss.Left, participants, messages, compose)
+	// The inline emoji popup sits directly above the compose box so it never
+	// covers the text being typed.
+	rightParts := []string{participants, messages}
+	if m.emojiPicker {
+		rightParts = append(rightParts, m.viewEmojiPicker())
+	}
+	rightParts = append(rightParts, compose)
+	right := lipgloss.JoinVertical(lipgloss.Left, rightParts...)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, right)
 
 	parts := []string{title}
@@ -359,6 +368,39 @@ func humanBytes(n int) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// emojiPickerHeight returns the number of terminal rows the inline emoji popup
+// occupies when open (one row per match + a hint row + the box border), or 0
+// when it is closed. layout() subtracts this from the messages viewport so the
+// overall vertical budget stays balanced.
+func (m Model) emojiPickerHeight() int {
+	if !m.emojiPicker || len(m.emojiMatches) == 0 {
+		return 0
+	}
+	return len(m.emojiMatches) + 1 + 2 // rows + hint + top/bottom border
+}
+
+// viewEmojiPicker renders the inline emoji autocomplete suggestions as a small
+// bordered list. Each row shows the glyph and its :shortcode:; the highlighted
+// row is reverse-styled. A hint line documents the navigation/accept keys.
+func (m Model) viewEmojiPicker() string {
+	if len(m.emojiMatches) == 0 {
+		return ""
+	}
+	rows := make([]string, 0, len(m.emojiMatches))
+	for i, e := range m.emojiMatches {
+		label := e.Emoji + "  :" + e.Name + ":"
+		if i == m.emojiSel {
+			rows = append(rows, styles.EmojiPickerSelected.Render(" "+label+" "))
+		} else {
+			rows = append(rows, styles.EmojiPickerItem.Render(" "+label+" "))
+		}
+	}
+	list := lipgloss.JoinVertical(lipgloss.Left, rows...)
+	hint := styles.Hint.Render("↑↓ select · tab/enter insert · esc close")
+	body := lipgloss.JoinVertical(lipgloss.Left, list, hint)
+	return styles.EmojiPicker.Render(body)
 }
 
 // viewStatusPicker renders the status-selection popup centered on screen.

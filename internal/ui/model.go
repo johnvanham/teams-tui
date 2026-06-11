@@ -103,6 +103,12 @@ type Model struct {
 	showStatus     bool                      // status-picker overlay visible
 	chosenStatus   *graph.PresenceOption     // status explicitly set by the user
 
+	// Inline emoji autocomplete (triggered by ":" + >=2 chars in the composer).
+	emojiPicker  bool                   // popup currently shown
+	emojiMatches []graph.EmojiShortcode // current matches for the typed prefix
+	emojiSel     int                    // highlighted match index
+	emojiQuery   string                 // the typed token (without leading ':')
+
 	// Transient notices.
 	errText     string
 	banner      string

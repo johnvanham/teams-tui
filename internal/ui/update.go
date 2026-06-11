@@ -471,6 +471,29 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, pasteImageCmd()
 	}
 
+	// The inline emoji picker (only open while composing) claims navigation and
+	// selection keys before pane-switching/refresh so Tab accepts a suggestion
+	// instead of changing panes. Printable keys still fall through to the
+	// composer below, re-filtering the popup without interrupting typing.
+	if m.emojiPicker && m.focus == focusCompose {
+		switch {
+		case msg.String() == "esc":
+			m.closeEmojiPicker()
+			return m, nil
+		case msg.String() == "up" || msg.String() == "ctrl+p":
+			m.emojiPickerMove(-1)
+			return m, nil
+		case msg.String() == "down" || msg.String() == "ctrl+n":
+			m.emojiPickerMove(1)
+			return m, nil
+		case key.Matches(msg, m.keys.Send), msg.String() == "tab":
+			if m.applyEmojiSelection() {
+				m.layout()
+				return m, nil
+			}
+		}
+	}
+
 	switch {
 	case key.Matches(msg, m.keys.NextPane):
 		m.cycleFocus(1)
@@ -494,12 +517,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			focusCmd := m.compose.Focus()
 			var cmd tea.Cmd
 			m.compose, cmd = m.compose.Update(msg)
+			m.refreshEmojiPicker()
 			m.layout() // grow the box to fit the new content
 			return m, tea.Batch(focusCmd, cmd)
 		}
 	}
 
-	// Compose-specific: Enter sends, alt+enter inserts a newline.
+	// Compose-specific: Enter sends, alt+enter inserts a newline. (Emoji-picker
+	// navigation/selection keys are intercepted earlier, before pane switching.)
 	if m.focus == focusCompose {
 		// Esc cancels an in-progress edit, restoring the compose box to a
 		// fresh (new-message) state.
@@ -518,11 +543,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, m.keys.Newline) {
 			// Inject a literal newline into the textarea.
 			m.compose.SetValue(m.compose.Value() + "\n")
+			m.closeEmojiPicker()
 			m.layout()
 			return m, nil
 		}
 		var cmd tea.Cmd
 		m.compose, cmd = m.compose.Update(msg)
+		// Re-evaluate the inline emoji suggestions against the new text.
+		m.refreshEmojiPicker()
 		// Recompute layout so the compose box grows/shrinks with its content.
 		m.layout()
 		return m, cmd
@@ -1000,6 +1028,8 @@ func (m *Model) focusCmd() tea.Cmd {
 	if m.focus == focusCompose {
 		return m.compose.Focus()
 	}
+	// Leaving the composer dismisses the inline emoji popup.
+	m.closeEmojiPicker()
 	m.compose.Blur()
 	return nil
 }
@@ -1183,7 +1213,11 @@ func (m *Model) rebuildChatList() tea.Cmd {
 }
 
 func (m Model) trySend() (tea.Model, tea.Cmd) {
-	text := strings.TrimSpace(m.compose.Value())
+	// Convert emoji shortcodes (:thumbsup:) and text emoticons (:-)) to Unicode
+	// before sending. This covers every outbound path below (new message, edit,
+	// and image caption), since they all derive from this one string.
+	text := strings.TrimSpace(graph.ReplaceShortcodes(m.compose.Value()))
+	m.closeEmojiPicker()
 	if m.currentChat == "" {
 		return m, nil
 	}
@@ -1249,6 +1283,7 @@ func (m *Model) clearPendingImage() {
 func (m *Model) cancelEdit() {
 	m.editingMsgID = ""
 	m.compose.Reset()
+	m.closeEmojiPicker()
 	m.layout()
 }
 
