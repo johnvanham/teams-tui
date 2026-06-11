@@ -6,14 +6,6 @@ import (
 	"github.com/jvh/teams-tui/internal/graph"
 )
 
-// unreadGlyph leads the title of a chat with unread messages; readGlyph is a
-// same-width blank used otherwise so titles stay aligned whether or not a chat
-// is unread. The chat delegate recolours unreadGlyph (see chatdelegate.go).
-const (
-	unreadGlyph = "●"
-	readGlyph   = " "
-)
-
 // chatItem adapts a graph.Chat to the bubbles list.Item / list.DefaultItem
 // interfaces.
 type chatItem struct {
@@ -38,13 +30,11 @@ func newChatItem(c graph.Chat, selfID string, unread bool) chatItem {
 	return chatItem{chat: c, selfID: selfID, preview: preview, unread: unread}
 }
 
-// Title implements list.DefaultItem. It leads with an unread marker (recoloured
-// by the chat delegate) followed by a type glyph and the chat's display name.
+// Title implements list.DefaultItem. It leads with a type glyph followed by the
+// chat's display name. Unread chats are highlighted by the chat delegate via a
+// row background (see chatdelegate.go), not by any title marker, so titles stay
+// aligned whether or not a chat is unread.
 func (i chatItem) Title() string {
-	marker := readGlyph
-	if i.unread {
-		marker = unreadGlyph
-	}
 	prefix := ""
 	switch i.chat.ChatType {
 	case graph.ChatGroup:
@@ -54,7 +44,7 @@ func (i chatItem) Title() string {
 	default:
 		prefix = "[>] "
 	}
-	return marker + " " + prefix + i.chat.DisplayName(i.selfID)
+	return prefix + i.chat.DisplayName(i.selfID)
 }
 
 // Description implements list.DefaultItem.

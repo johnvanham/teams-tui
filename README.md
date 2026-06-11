@@ -191,11 +191,11 @@ into the model. Polling is driven by `tea.Tick`.
 - Reading tokens is intentionally avoided in code; tokens are treated as opaque
   per Microsoft guidance.
 - Message history is fetched per chat on demand and refreshed on the poll tick.
-- Chats with unread messages are highlighted in the sidebar with a bold marker
-  (`●`). Unread state comes from Graph's per-chat `viewpoint` read marker;
-  opening a chat marks it read locally and on the server (via
-  `markChatReadForUser`, covered by `Chat.ReadWrite`), so it syncs to your other
-  devices. Your own most recent message never counts as unread.
+- Chats with unread messages are highlighted in the sidebar with a warm
+  background fill behind the row. Unread state comes from Graph's per-chat
+  `viewpoint` read marker; opening a chat marks it read locally and on the
+  server (via `markChatReadForUser`, covered by `Chat.ReadWrite`), so it syncs
+  to your other devices. Your own most recent message never counts as unread.
 - This is a chat-focused client; it does not implement calls, channels/teams
   browsing, files, or app tabs.
 - Reactions are rendered; threaded replies are not.
