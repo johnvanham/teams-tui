@@ -539,11 +539,21 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if key.Matches(msg, m.keys.Send) {
+			// While the cursor sits inside an unclosed ``` code fence, Enter
+			// continues the block (inserts a newline) instead of sending, so a
+			// multi-line code block can be typed naturally. Close the fence with
+			// another ``` line and Enter then sends as usual.
+			if m.inOpenCodeBlock() {
+				m.compose.InsertRune('\n')
+				m.closeEmojiPicker()
+				m.layout()
+				return m, nil
+			}
 			return m.trySend()
 		}
 		if key.Matches(msg, m.keys.Newline) {
-			// Inject a literal newline into the textarea.
-			m.compose.SetValue(m.compose.Value() + "\n")
+			// Inject a literal newline at the cursor.
+			m.compose.InsertRune('\n')
 			m.closeEmojiPicker()
 			m.layout()
 			return m, nil
@@ -1289,6 +1299,27 @@ func (m *Model) rebuildChatList() tea.Cmd {
 	}
 	m.chatsSig = newSig
 	return m.list.SetItems(items)
+}
+
+// inOpenCodeBlock reports whether the compose buffer currently has an unclosed
+// ``` code fence at or before the cursor's line — i.e. the user is typing inside
+// a code block that hasn't been closed yet. It counts fence lines (a line whose
+// first non-space content is ```) up to and including the cursor's line; an odd
+// count means a block is open. This lets Enter continue the block instead of
+// sending the message.
+func (m Model) inOpenCodeBlock() bool {
+	lines := strings.Split(m.compose.Value(), "\n")
+	cur := m.compose.Line()
+	if cur >= len(lines) {
+		cur = len(lines) - 1
+	}
+	fences := 0
+	for i := 0; i <= cur && i < len(lines); i++ {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), codeFence) {
+			fences++
+		}
+	}
+	return fences%2 == 1
 }
 
 func (m Model) trySend() (tea.Model, tea.Cmd) {

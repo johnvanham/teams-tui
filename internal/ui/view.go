@@ -424,6 +424,9 @@ func (m Model) statusLine() string {
 		left = "MESSAGES"
 	case focusCompose:
 		left = "COMPOSE"
+		if m.inOpenCodeBlock() {
+			left = "CODE BLOCK (enter for new line · close with ``` then enter to send)"
+		}
 	}
 	if m.editingMsgID != "" {
 		left = "EDITING (enter to save · esc to cancel)"
