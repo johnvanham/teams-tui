@@ -71,37 +71,39 @@ type Model struct {
 	keys         keyMap
 
 	// State.
-	phase          phase
-	focus          focusArea
-	sidebarMode    sidebarMode // chats vs contacts in the left column
-	contactsLoaded bool        // whether the people list has been fetched once
-	deviceCode     *auth.DeviceCode
-	width          int
-	height         int
-	ready          bool
-	currentChat    string
-	messages       map[string][]graph.Message
-	chatOrder      []string                  // chat IDs in list order
-	chats          map[string]graph.Chat     // chat ID -> chat (for member lookup)
-	presences      map[string]graph.Presence // user ID -> presence
-	chatErrors     map[string]string         // chat ID -> message-load error notice
-	nextLink       map[string]string         // chat ID -> @odata.nextLink (older msgs)
-	loadingMore    map[string]bool           // chat ID -> older-page fetch in flight
-	lastSync       map[string]time.Time      // chat ID -> newest lastModified seen
-	readUntil      map[string]time.Time      // chat ID -> local read horizon (mark-as-read)
-	chatsSig       string                    // signature of the rendered chat list
-	people         []graph.Person            // contacts currently shown in the sidebar
-	convImages     []graph.ImageRef          // images in the open chat, display order
-	imageLines     map[int]int               // viewport content line -> convImages index
-	openingImage   bool                      // an image download/open is in flight
-	editingMsgID   string                    // message ID being edited ("" if composing new)
-	pendingImage   []byte                    // image pasted from the clipboard, awaiting send
-	pendingImageCT string                    // MIME type of pendingImage (e.g. "image/png")
-	focused        bool                      // terminal window has focus
-	myPresence     *graph.Presence           // signed-in user's own presence
-	sessionID      string                    // app presence session ID (client ID)
-	showStatus     bool                      // status-picker overlay visible
-	chosenStatus   *graph.PresenceOption     // status explicitly set by the user
+	phase           phase
+	focus           focusArea
+	sidebarMode     sidebarMode // chats vs contacts in the left column
+	contactsLoaded  bool        // whether the people list has been fetched once
+	deviceCode      *auth.DeviceCode
+	width           int
+	height          int
+	ready           bool
+	currentChat     string
+	messages        map[string][]graph.Message
+	chatOrder       []string                  // chat IDs in list order
+	chats           map[string]graph.Chat     // chat ID -> chat (for member lookup)
+	presences       map[string]graph.Presence // user ID -> presence
+	chatErrors      map[string]string         // chat ID -> message-load error notice
+	nextLink        map[string]string         // chat ID -> @odata.nextLink (older msgs)
+	loadingMore     map[string]bool           // chat ID -> older-page fetch in flight
+	lastSync        map[string]time.Time      // chat ID -> newest lastModified seen
+	readUntil       map[string]time.Time      // chat ID -> local read horizon (mark-as-read)
+	notifiedUntil   map[string]time.Time      // chat ID -> newest message we've already notified about
+	notifyBaselined bool                      // first chat-list poll seen (suppresses startup backlog pings)
+	chatsSig        string                    // signature of the rendered chat list
+	people          []graph.Person            // contacts currently shown in the sidebar
+	convImages      []graph.ImageRef          // images in the open chat, display order
+	imageLines      map[int]int               // viewport content line -> convImages index
+	openingImage    bool                      // an image download/open is in flight
+	editingMsgID    string                    // message ID being edited ("" if composing new)
+	pendingImage    []byte                    // image pasted from the clipboard, awaiting send
+	pendingImageCT  string                    // MIME type of pendingImage (e.g. "image/png")
+	focused         bool                      // terminal window has focus
+	myPresence      *graph.Presence           // signed-in user's own presence
+	sessionID       string                    // app presence session ID (client ID)
+	showStatus      bool                      // status-picker overlay visible
+	chosenStatus    *graph.PresenceOption     // status explicitly set by the user
 
 	// Inline emoji autocomplete (triggered by ":" + >=2 chars in the composer).
 	emojiPicker  bool                   // popup currently shown
@@ -169,32 +171,33 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 	picker.SetFilteringEnabled(false)
 
 	return Model{
-		ctx:          ctx,
-		cfg:          cfg,
-		auth:         a,
-		store:        store,
-		notifier:     n,
-		sessionID:    cfg.ClientID,
-		list:         l,
-		contacts:     cl,
-		viewport:     vp,
-		statusPicker: picker,
-		compose:      ta,
-		spinner:      sp,
-		help:         help.New(),
-		keys:         defaultKeyMap(),
-		phase:        phaseAuthStarting,
-		focus:        focusChats,
-		messages:     make(map[string][]graph.Message),
-		chats:        make(map[string]graph.Chat),
-		presences:    make(map[string]graph.Presence),
-		chatErrors:   make(map[string]string),
-		nextLink:     make(map[string]string),
-		loadingMore:  make(map[string]bool),
-		lastSync:     make(map[string]time.Time),
-		readUntil:    make(map[string]time.Time),
-		focused:      true, // assume focused until told otherwise
-		alerted:      make(map[string]bool),
+		ctx:           ctx,
+		cfg:           cfg,
+		auth:          a,
+		store:         store,
+		notifier:      n,
+		sessionID:     cfg.ClientID,
+		list:          l,
+		contacts:      cl,
+		viewport:      vp,
+		statusPicker:  picker,
+		compose:       ta,
+		spinner:       sp,
+		help:          help.New(),
+		keys:          defaultKeyMap(),
+		phase:         phaseAuthStarting,
+		focus:         focusChats,
+		messages:      make(map[string][]graph.Message),
+		chats:         make(map[string]graph.Chat),
+		presences:     make(map[string]graph.Presence),
+		chatErrors:    make(map[string]string),
+		nextLink:      make(map[string]string),
+		loadingMore:   make(map[string]bool),
+		lastSync:      make(map[string]time.Time),
+		readUntil:     make(map[string]time.Time),
+		notifiedUntil: make(map[string]time.Time),
+		focused:       true, // assume focused until told otherwise
+		alerted:       make(map[string]bool),
 	}
 }
 

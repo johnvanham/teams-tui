@@ -38,6 +38,10 @@ is about to start.
   presence session so your chosen status persists like a native client.
 - **Meeting alerts:** an in-TUI banner *and* a desktop notification when a
   meeting is starting within your lookahead window.
+- **Message notifications:** a desktop notification for new incoming messages
+  across all your chats (your own messages and the chat you're actively viewing
+  while the terminal is focused are skipped). Disable with
+  `disable_desktop_notify`, which also turns off meeting alerts.
 - **Hybrid-friendly auth:** uses the OAuth 2.0 **device authorization grant**,
   so sign-in happens in your real browser. This works for both fully
   Entra-hosted tenants and **hybrid Entra/Active Directory federated** setups —

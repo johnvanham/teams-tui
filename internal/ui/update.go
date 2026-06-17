@@ -624,6 +624,12 @@ func (m Model) handleChats(msg chatsMsg) (tea.Model, tea.Cmd) {
 		m.chats[c.ID] = c
 	}
 
+	// Fire desktop notifications for new messages across all chats, using the
+	// previews Graph returned. The first poll only establishes baselines so the
+	// existing backlog doesn't ping at startup.
+	m.notifyNewChatMessages(chats, !m.notifyBaselined)
+	m.notifyBaselined = true
+
 	// A successful chat refresh clears any stale transient error in the status
 	// bar so it doesn't linger after recovery.
 	m.errText = ""
@@ -779,6 +785,75 @@ func (m Model) handleMessages(msg messagesMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// notifyNewChatMessages fires a desktop notification for chats whose newest
+// message (per Graph's lastMessagePreview) is newer than the last one we
+// notified about. Driven from the chat-list poll, it covers every chat — not
+// just the open one — using the preview Graph already returns, so no extra
+// message fetch is needed.
+//
+// A per-chat horizon (notifiedUntil) ensures each message pings at most once.
+// The first time we ever see the chat list (baseline), we record horizons
+// without notifying so the user isn't flooded with their entire backlog at
+// startup. Messages the user sent themselves and the chat they're actively
+// viewing (while the terminal is focused) are skipped.
+func (m *Model) notifyNewChatMessages(chats []graph.Chat, baseline bool) {
+	self := m.selfID()
+
+	for _, c := range chats {
+		prev := c.LastMessagePreview
+		if prev == nil || prev.CreatedAt.IsZero() {
+			continue
+		}
+
+		last := prev.CreatedAt
+		alreadyNotified := m.notifiedUntil[c.ID]
+
+		// Advance the horizon up front so a message never re-notifies, then
+		// decide whether this one warrants a ping.
+		if last.After(m.notifiedUntil[c.ID]) {
+			m.notifiedUntil[c.ID] = last
+		}
+
+		if baseline {
+			continue // startup: establish horizons silently
+		}
+		if !last.After(alreadyNotified) {
+			continue // nothing newer than what we've already pinged
+		}
+		// Skip our own messages.
+		if from := prev.From; from != nil && from.User != nil && self != "" && from.User.ID == self {
+			continue
+		}
+		// Skip the chat the user is actively watching.
+		if c.ID == m.currentChat && m.focused {
+			continue
+		}
+
+		text := prev.Body.PlainText()
+		if text == "" {
+			text = "New message"
+		}
+		title := "Teams"
+		if name := c.DisplayName(self); name != "" {
+			title = name
+		}
+		m.notifier.Notify(title, notifyPreview(text))
+	}
+}
+
+// notifyPreview shortens a message body for a notification: it collapses it to a
+// single line and truncates long text so the OS popup stays compact.
+func notifyPreview(s string) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.Join(strings.Fields(s), " ")
+	const max = 140
+	if len([]rune(s)) > max {
+		r := []rune(s)
+		s = strings.TrimSpace(string(r[:max])) + "…"
+	}
+	return s
 }
 
 // advanceRead moves a chat's local read horizon past the newest message in
