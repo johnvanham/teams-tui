@@ -1,22 +1,21 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
-
-	"github.com/jvh/teams-tui/internal/ui/styles"
 )
 
 // highlightCode applies syntax highlighting to a code block, returning one
-// styled string per input line. Every token carries the code-block background
-// so the panel reads as one solid colour; the foreground is chosen per token
-// type from the palette in styles. When the language is unknown or lexing
-// fails, it returns nil so the caller falls back to plain (unstyled) text.
-func highlightCode(lines []string, lang string) []string {
-	if len(lines) == 0 {
+// styled string per input line. Colours come from the given chroma style (its
+// own palette, e.g. monokai), with each token rendered over that style's
+// background so the panel reads as one solid theme. When the language is unknown
+// or lexing fails, it returns nil so the caller falls back to plain text.
+func highlightCode(lines []string, lang string, style *chroma.Style) []string {
+	if len(lines) == 0 || style == nil {
 		return nil
 	}
 	lexer := pickLexer(lang, strings.Join(lines, "\n"))
@@ -30,6 +29,8 @@ func highlightCode(lines []string, lang string) []string {
 		return nil
 	}
 
+	bg := styleBackground(style)
+
 	// Rebuild the source as styled text, then split on newlines. Chroma
 	// preserves the exact characters (including newlines inside token values),
 	// so splitting the styled stream yields the same line count as the input.
@@ -39,14 +40,14 @@ func highlightCode(lines []string, lang string) []string {
 		if value == "" {
 			continue
 		}
-		style := tokenStyle(tok.Type)
-		// Apply styling per line segment so a multi-line token (rare: block
+		ls := tokenStyle(style, tok.Type, bg)
+		// Apply styling per line segment so a multi-line token (block
 		// comments/strings) keeps the background on every line and the newline
-		// itself stays unstyled (so split works cleanly).
+		// itself stays unstyled (so the split below works cleanly).
 		parts := strings.Split(value, "\n")
 		for i, part := range parts {
 			if part != "" {
-				b.WriteString(style.Render(part))
+				b.WriteString(ls.Render(part))
 			}
 			if i < len(parts)-1 {
 				b.WriteByte('\n')
@@ -55,12 +56,22 @@ func highlightCode(lines []string, lang string) []string {
 	}
 
 	out := strings.Split(b.String(), "\n")
-	// Defensive: if the token stream lost/added a trailing newline, reconcile to
-	// the original line count so callers' indexing stays valid.
+	// Defensive: if the token stream changed the line count, bail to the plain
+	// fallback so callers' indexing stays valid.
 	if len(out) != len(lines) {
 		return nil
 	}
 	return out
+}
+
+// styleBackground returns the chroma style's background colour as a lipgloss
+// colour, or nil when the style declares none (terminal default is used).
+func styleBackground(style *chroma.Style) color.Color {
+	bg := style.Get(chroma.Background).Background
+	if !bg.IsSet() {
+		return nil
+	}
+	return lipgloss.Color(bg.String())
 }
 
 // pickLexer resolves a chroma lexer from the fenced language hint, falling back
@@ -78,35 +89,37 @@ func pickLexer(lang, source string) chroma.Lexer {
 	return nil
 }
 
-// tokenStyle maps a chroma token type to a lipgloss style over the code-block
-// background, using the existing palette. Unmapped tokens fall back to the
-// default code foreground.
-func tokenStyle(t chroma.TokenType) lipgloss.Style {
-	base := lipgloss.NewStyle().Background(styles.CodeBlockBg)
-	switch {
-	case t.InCategory(chroma.Comment):
-		return base.Foreground(styles.Grey).Italic(true)
-	case t.InCategory(chroma.Keyword):
-		return base.Foreground(styles.Purple).Bold(true)
-	case t.InCategory(chroma.LiteralString):
-		return base.Foreground(styles.Green)
-	case t.InCategory(chroma.LiteralNumber):
-		return base.Foreground(styles.Orange)
-	case t.InCategory(chroma.Name):
-		switch t {
-		case chroma.NameFunction, chroma.NameClass, chroma.NameNamespace:
-			return base.Foreground(styles.PurpleLt).Bold(true)
-		case chroma.NameBuiltin, chroma.NameBuiltinPseudo:
-			return base.Foreground(styles.Yellow)
-		case chroma.NameTag:
-			return base.Foreground(styles.Purple)
-		case chroma.NameAttribute:
-			return base.Foreground(styles.PurpleLt)
-		}
-		return base.Foreground(styles.CodeFg)
-	case t.InCategory(chroma.Operator):
-		return base.Foreground(styles.Yellow)
-	default:
-		return base.Foreground(styles.CodeFg)
+// tokenStyle builds a lipgloss style for a token from the chroma style entry:
+// foreground colour plus bold/italic/underline, over the panel background.
+func tokenStyle(style *chroma.Style, t chroma.TokenType, bg color.Color) lipgloss.Style {
+	ls := lipgloss.NewStyle()
+	if bg != nil {
+		ls = ls.Background(bg)
 	}
+	entry := style.Get(t)
+	if entry.Colour.IsSet() {
+		ls = ls.Foreground(lipgloss.Color(entry.Colour.String()))
+	}
+	if entry.Bold == chroma.Yes {
+		ls = ls.Bold(true)
+	}
+	if entry.Italic == chroma.Yes {
+		ls = ls.Italic(true)
+	}
+	if entry.Underline == chroma.Yes {
+		ls = ls.Underline(true)
+	}
+	return ls
+}
+
+// codeBlockBackground returns the chroma style's background as a lipgloss colour,
+// falling back to the app's CodeBlockBg when the style declares none. Used so the
+// panel padding/labels share the theme's background.
+func codeBlockBackground(style *chroma.Style) color.Color {
+	if style != nil {
+		if bg := styleBackground(style); bg != nil {
+			return bg
+		}
+	}
+	return nil
 }

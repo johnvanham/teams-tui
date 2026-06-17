@@ -11,6 +11,8 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"github.com/alecthomas/chroma/v2"
+	chromastyles "github.com/alecthomas/chroma/v2/styles"
 
 	"github.com/jvh/teams-tui/internal/auth"
 	"github.com/jvh/teams-tui/internal/config"
@@ -54,6 +56,10 @@ type Model struct {
 	auth     *auth.Authenticator
 	store    *auth.Store
 	notifier *notify.Notifier
+
+	// codeStyle is the resolved chroma theme used to syntax-highlight code
+	// blocks (from cfg.CodeBlockStyle, falling back to the chroma default).
+	codeStyle *chroma.Style
 
 	// Populated after authentication.
 	tokens *auth.TokenSource
@@ -170,9 +176,18 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 	picker.SetShowStatusBar(false)
 	picker.SetFilteringEnabled(false)
 
+	// Resolve the syntax-highlighting theme once. chromastyles.Get returns its
+	// bland built-in fallback ("swapoff") for an unknown name, so when the
+	// configured style isn't found we fall back to our own default instead.
+	codeStyle := chromastyles.Get(cfg.CodeBlockStyle)
+	if codeStyle == nil || (codeStyle.Name == "swapoff" && cfg.CodeBlockStyle != "swapoff") {
+		codeStyle = chromastyles.Get(config.DefaultCodeBlockStyle)
+	}
+
 	return Model{
 		ctx:           ctx,
 		cfg:           cfg,
+		codeStyle:     codeStyle,
 		auth:          a,
 		store:         store,
 		notifier:      n,

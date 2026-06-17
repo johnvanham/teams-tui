@@ -40,7 +40,15 @@ type Config struct {
 	MeetingLookaheadMinutes int `json:"meeting_lookahead_minutes,omitempty"`
 	// DisableDesktopNotify turns off OS-level desktop notifications.
 	DisableDesktopNotify bool `json:"disable_desktop_notify,omitempty"`
+	// CodeBlockStyle is the chroma syntax-highlighting theme used for code
+	// blocks (e.g. "monokai", "dracula", "github-dark"). Defaults to
+	// DefaultCodeBlockStyle. An unknown name falls back to that default.
+	CodeBlockStyle string `json:"code_block_style,omitempty"`
 }
+
+// DefaultCodeBlockStyle is the chroma theme used to colour code blocks when the
+// config doesn't specify one.
+const DefaultCodeBlockStyle = "monokai"
 
 // DefaultScopes are the delegated permissions the TUI needs. offline_access is
 // required to obtain a refresh token for the keyring cache.
@@ -88,6 +96,9 @@ func Load() (*Config, error) {
 	if v := os.Getenv("TEAMS_TUI_SCOPES"); v != "" {
 		cfg.Scopes = strings.Fields(v)
 	}
+	if v := os.Getenv("TEAMS_TUI_CODE_BLOCK_STYLE"); v != "" {
+		cfg.CodeBlockStyle = v
+	}
 
 	cfg.applyDefaults()
 
@@ -117,6 +128,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MeetingLookaheadMinutes <= 0 {
 		c.MeetingLookaheadMinutes = 5
+	}
+	if c.CodeBlockStyle == "" {
+		c.CodeBlockStyle = DefaultCodeBlockStyle
 	}
 }
 

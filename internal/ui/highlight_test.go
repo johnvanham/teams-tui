@@ -3,12 +3,16 @@ package ui
 import (
 	"strings"
 	"testing"
+
+	chromastyles "github.com/alecthomas/chroma/v2/styles"
 )
 
 func TestHighlightCode(t *testing.T) {
+	style := chromastyles.Get("monokai")
+
 	t.Run("known language returns aligned styled lines", func(t *testing.T) {
 		code := []string{"package main", "", "func main() {}"}
-		out := highlightCode(code, "go")
+		out := highlightCode(code, "go", style)
 		if out == nil {
 			t.Fatal("highlightCode returned nil for go")
 		}
@@ -30,7 +34,7 @@ func TestHighlightCode(t *testing.T) {
 
 	t.Run("unknown language falls back to nil", func(t *testing.T) {
 		// A nonsense language with content that won't confidently analyse.
-		if out := highlightCode([]string{"xyzzy"}, "not-a-language"); out != nil {
+		if out := highlightCode([]string{"xyzzy"}, "not-a-language", style); out != nil {
 			// Analyse may still guess; tolerate a guess as long as it's aligned.
 			if len(out) != 1 {
 				t.Fatalf("fallback returned %d lines, want 1", len(out))
@@ -39,7 +43,7 @@ func TestHighlightCode(t *testing.T) {
 	})
 
 	t.Run("empty input returns nil", func(t *testing.T) {
-		if out := highlightCode(nil, "go"); out != nil {
+		if out := highlightCode(nil, "go", style); out != nil {
 			t.Errorf("expected nil for empty input, got %v", out)
 		}
 	})

@@ -3,5 +3,6 @@
   "tenant_id": "REPLACE-WITH-DIRECTORY-TENANT-ID",
   "poll_interval_seconds": 10,
   "meeting_lookahead_minutes": 5,
-  "disable_desktop_notify": false
+  "disable_desktop_notify": false,
+  "code_block_style": "monokai"
 }

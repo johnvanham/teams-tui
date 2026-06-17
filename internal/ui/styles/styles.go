@@ -159,24 +159,9 @@ var (
 	// CodeBlockBg is the dim background behind fenced code blocks in messages.
 	CodeBlockBg = lipgloss.Color("#15151F")
 
-	// CodeFg is the default foreground for code text (used for tokens the syntax
-	// highlighter doesn't otherwise colour, and for un-highlighted blocks).
+	// CodeFg is the default foreground for un-highlighted code text (used when
+	// the language is unknown, so the syntax highlighter can't colour tokens).
 	CodeFg = lipgloss.Color("#C8C8D8")
-
-	// CodeBlock styles a multi-line fenced code block in a conversation. Each
-	// line is padded to the block width so the background reads as one solid
-	// panel; whitespace inside is preserved by the renderer (no reflow).
-	CodeBlock = lipgloss.NewStyle().
-			Foreground(CodeFg).
-			Background(CodeBlockBg).
-			Padding(0, 1)
-
-	// CodeBlockLang labels the language on the top border of a code block.
-	CodeBlockLang = lipgloss.NewStyle().
-			Foreground(PurpleLt).
-			Background(CodeBlockBg).
-			Bold(true).
-			Padding(0, 1)
 
 	// InlineCode highlights a `backtick` snippet within prose.
 	InlineCode = lipgloss.NewStyle().

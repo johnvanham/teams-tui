@@ -137,9 +137,16 @@ Default location: `$XDG_CONFIG_HOME/teams-tui/config.json` (typically
   "tenant_id": "11111111-1111-1111-1111-111111111111",
   "poll_interval_seconds": 10,
   "meeting_lookahead_minutes": 5,
-  "disable_desktop_notify": false
+  "disable_desktop_notify": false,
+  "code_block_style": "monokai"
 }
 ```
+
+`code_block_style` selects the [chroma](https://github.com/alecthomas/chroma)
+theme used to syntax-highlight code blocks (e.g. `monokai`, `dracula`,
+`github-dark`, `nord`, `solarized-dark`). It defaults to `monokai`; an unknown
+name falls back to that default. It can also be set via
+`TEAMS_TUI_CODE_BLOCK_STYLE`.
 
 For a sovereign cloud or a custom federation host, override `auth_host` and
 `graph_base_url` accordingly.
