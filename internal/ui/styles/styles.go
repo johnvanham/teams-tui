@@ -159,11 +159,15 @@ var (
 	// CodeBlockBg is the dim background behind fenced code blocks in messages.
 	CodeBlockBg = lipgloss.Color("#15151F")
 
+	// CodeFg is the default foreground for code text (used for tokens the syntax
+	// highlighter doesn't otherwise colour, and for un-highlighted blocks).
+	CodeFg = lipgloss.Color("#C8C8D8")
+
 	// CodeBlock styles a multi-line fenced code block in a conversation. Each
 	// line is padded to the block width so the background reads as one solid
 	// panel; whitespace inside is preserved by the renderer (no reflow).
 	CodeBlock = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#C8C8D8")).
+			Foreground(CodeFg).
 			Background(CodeBlockBg).
 			Padding(0, 1)
 

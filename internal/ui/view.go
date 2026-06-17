@@ -615,17 +615,20 @@ func renderBody(text string, width int) string {
 // renderCodeBlock styles a code block's lines as one dim panel. Each line is
 // padded to a uniform inner width so the background forms a solid rectangle;
 // lines wider than the available space are truncated with an ellipsis (code is
-// not reflowed). An optional language label sits on a header row.
+// not reflowed). When the language is recognized, the code is syntax-highlighted
+// per token; otherwise it renders in a single code colour. An optional language
+// label sits on a header row.
 func renderCodeBlock(code []string, lang string, width int) string {
-	// Inner width available for code text inside the style's horizontal padding
+	// Inner width available for code text inside the panel's horizontal padding
 	// (1 cell each side).
 	inner := width - 2
 	if inner < 1 {
 		inner = 1
 	}
 
-	// Determine the panel width from the widest line, clamped to the viewport,
-	// so short snippets don't stretch the full width.
+	// Panel width is the widest (plain) line, clamped to the viewport, so short
+	// snippets don't stretch the full width. Widths are measured on the plain
+	// text — never the highlighted text — so syntax-colour escapes don't skew it.
 	panel := 0
 	for _, c := range code {
 		if w := ansi.StringWidth(c); w > panel {
@@ -642,21 +645,55 @@ func renderCodeBlock(code []string, lang string, width int) string {
 		panel = 1
 	}
 
+	// Syntax-highlight when possible; highlighted[i] aligns with code[i].
+	highlighted := highlightCode(code, lang)
+
 	var rows []string
 	if lang != "" {
 		rows = append(rows, styles.CodeBlockLang.Width(panel+2).Render(lang))
 	}
-	for _, c := range code {
-		if ansi.StringWidth(c) > panel {
-			c = ansi.Truncate(c, panel, "…")
+	for i, c := range code {
+		styled := ""
+		if highlighted != nil {
+			styled = highlighted[i]
 		}
-		rows = append(rows, styles.CodeBlock.Width(panel+2).Render(c))
+		rows = append(rows, renderCodeLine(c, styled, panel))
 	}
 	if len(rows) == 0 {
 		// Empty block: render a single blank padded row so it's still visible.
 		rows = append(rows, styles.CodeBlock.Width(panel+2).Render(""))
 	}
 	return strings.Join(rows, "\n")
+}
+
+// renderCodeLine renders one code line into the panel. plain is the raw text
+// (used for width math and the un-highlighted fallback); styled is the same line
+// with syntax-colour escapes ("" when highlighting is unavailable). The line is
+// truncated to panel cells and padded with background-coloured spaces so every
+// row is exactly panel+2 wide (1 cell padding each side).
+func renderCodeLine(plain, styled string, panel int) string {
+	if styled == "" {
+		// Plain path: lipgloss handles truncation-by-render width + padding.
+		if ansi.StringWidth(plain) > panel {
+			plain = ansi.Truncate(plain, panel, "…")
+		}
+		return styles.CodeBlock.Width(panel + 2).Render(plain)
+	}
+
+	// Highlighted path: the styled text already carries fg+bg escapes, so we
+	// truncate and pad manually (escape-aware) rather than re-styling, which
+	// would clobber the per-token colours.
+	body := styled
+	if ansi.StringWidth(plain) > panel {
+		body = ansi.Truncate(styled, panel, "…")
+	}
+	pad := panel - ansi.StringWidth(body)
+	if pad < 0 {
+		pad = 0
+	}
+	// One cell of background padding on each side, plus right-fill to panel.
+	bg := lipgloss.NewStyle().Background(styles.CodeBlockBg)
+	return bg.Render(" ") + body + bg.Render(strings.Repeat(" ", pad)) + bg.Render(" ")
 }
 
 // inlineCodeRe matches a `backtick` span within prose so it can be styled.

@@ -17,6 +17,33 @@ func TestPlainTextCodeBlocks(t *testing.T) {
 			want: "see this:\n\n```\ndef f():\n    if x:\n        return 1\n\n    return 0\n```",
 		},
 		{
+			// The canonical form the Teams service stores for a sent code block:
+			// a <codeblock> element wrapping a <code> with literal newlines.
+			name: "teams codeblock element",
+			body: MessageBody{
+				ContentType: "html",
+				Content:     "<codeblock class=\"\"><code>&lt;?php\n    echo 'another test';\n?&gt;</code></codeblock> ",
+			},
+			want: "```\n<?php\n    echo 'another test';\n?>\n```",
+		},
+		{
+			name: "teams codeblock with language class",
+			body: MessageBody{
+				ContentType: "html",
+				Content:     `<codeblock class="language-go"><code>fmt.Println("hi")</code></codeblock>`,
+			},
+			want: "```go\nfmt.Println(\"hi\")\n```",
+		},
+		{
+			// Teams stores the language as a bare, often capitalized class value.
+			name: "teams codeblock bare language class",
+			body: MessageBody{
+				ContentType: "html",
+				Content:     "<codeblock class=\"Php\"><code>&lt;?php\necho 'test';\n?&gt;</code></codeblock>",
+			},
+			want: "```php\n<?php\necho 'test';\n?>\n```",
+		},
+		{
 			name: "language hint from data-language",
 			body: MessageBody{
 				ContentType: "html",
@@ -85,19 +112,29 @@ func TestPlainTextCodeBlocks(t *testing.T) {
 
 func TestDetectLanguage(t *testing.T) {
 	tests := []struct {
-		in   string
-		want string
+		name      string
+		attrs     string
+		inner     string
+		bareClass bool
+		want      string
 	}{
-		{`data-language="Go"`, "go"},
-		{`class="language-rust"`, "rust"},
-		{`class="lang-js"`, "js"},
-		{`class="hljs language-c++"`, "c++"},
-		{`class="plain"`, ""},
-		{``, ""},
+		{"data-language", `data-language="Go"`, "", false, "go"},
+		{"class language-", `class="language-rust"`, "", false, "rust"},
+		{"class lang-", `class="lang-js"`, "", false, "js"},
+		{"class list with token", `class="hljs language-c++"`, "", false, "c++"},
+		{"bare class on codeblock", `class="Php"`, "", true, "php"},
+		{"bare class capitalized", `class="Go"`, "", true, "go"},
+		{"bare class ignored on pre", `class="plain"`, "", false, ""},
+		{"inner language- token", "", `<code class="language-python">`, false, "python"},
+		{"inner highlight class ignored", "", `<span class="hljs-keyword">`, true, ""},
+		{"empty", "", "", true, ""},
 	}
 	for _, tt := range tests {
-		if got := detectLanguage(tt.in); got != tt.want {
-			t.Errorf("detectLanguage(%q) = %q, want %q", tt.in, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			if got := detectLanguage(tt.attrs, tt.inner, tt.bareClass); got != tt.want {
+				t.Errorf("detectLanguage(%q, %q, %v) = %q, want %q",
+					tt.attrs, tt.inner, tt.bareClass, got, tt.want)
+			}
+		})
 	}
 }

@@ -27,13 +27,16 @@ is about to start.
 - **Chats only, done well:** one-to-one, multi-person group, and meeting chats.
 - **Live updates** via lightweight polling of Microsoft Graph.
 - **Send messages** inline from the compose box.
-- **Code blocks:** incoming `<pre>`/`<code>` render as styled, monospace code
-  blocks (and inline `` `code` ``). When composing, type a Markdown fence
+- **Code blocks:** incoming code blocks render as styled panels with
+  per-language **syntax highlighting** (via chroma), plus inline `` `code` ``.
+  Teams' own `<codeblock>` element and `<pre>`/`<code>` from other clients are
+  both recognized, and the language is detected from the message (e.g. a
+  `class="Php"` block highlights as PHP). When composing, type a Markdown fence
   (```` ``` ````, optionally with a language like ```` ```go ````) to start a
   code block: `enter` then adds new lines instead of sending, so you can type
   multiple lines, and a closing ```` ``` ```` line lets `enter` send as usual.
-  Inline `` `code` `` works too. Both render as real code blocks for everyone,
-  including the native Teams client.
+  Both render as real code blocks for everyone, including the native Teams
+  client.
 - **Emoji:** incoming Teams emoji render as Unicode glyphs. When composing,
   classic emoticons (`:-)`, `<3`, `:D`) are auto-replaced with the emoji as you
   type, like the desktop client. Typing `:` followed by at least two characters

@@ -341,6 +341,7 @@ func (c *Client) ListMessagesPage(ctx context.Context, chatID string, top int) (
 	if err := c.do(ctx, http.MethodGet, path, nil, nil, &resp); err != nil {
 		return nil, "", err
 	}
+	debugDumpMessages(resp.Value)
 	return resp.Value, resp.NextLink, nil
 }
 
@@ -355,6 +356,7 @@ func (c *Client) FollowMessagesPage(ctx context.Context, nextLink string) ([]Mes
 	if err := c.do(ctx, http.MethodGet, nextLink, nil, nil, &resp); err != nil {
 		return nil, "", err
 	}
+	debugDumpMessages(resp.Value)
 	return resp.Value, resp.NextLink, nil
 }
 
@@ -375,6 +377,7 @@ func (c *Client) ListMessagesSince(ctx context.Context, chatID string, since tim
 	if err := c.do(ctx, http.MethodGet, path, nil, nil, &resp); err != nil {
 		return nil, err
 	}
+	debugDumpMessages(resp.Value)
 	return resp.Value, nil
 }
 
