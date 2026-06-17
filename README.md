@@ -214,6 +214,13 @@ The UI follows The Elm Architecture: all Graph/auth I/O happens inside
 `tea.Cmd`s that return typed messages, which the single `Update` function folds
 into the model. Polling is driven by `tea.Tick`.
 
+Code blocks round-trip through three places that share the same fence
+convention: `graph/code.go` parses Teams' stored HTML (its `<codeblock>`
+element and `<pre>`/`<code>`) into Markdown-ish fences, `graph/compose.go`
+converts outgoing compose text back into the `<pre><code>` HTML Teams expects,
+and `ui/highlight.go` syntax-highlights the rendered block using a
+[chroma](https://github.com/alecthomas/chroma) theme (`code_block_style`).
+
 ## Notes & limitations
 
 - Reading tokens is intentionally avoided in code; tokens are treated as opaque
