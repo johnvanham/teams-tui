@@ -129,7 +129,7 @@ const (
 	wheelScrollLines = 5
 	// fastInterval is the rapid incremental poll of the open chat when the app
 	// is focused — near-real-time without true push.
-	fastInterval = 2 * time.Second
+	fastInterval = 1 * time.Second
 	// fastIntervalIdle is the backed-off open-chat poll when the terminal is
 	// unfocused.
 	fastIntervalIdle = 15 * time.Second

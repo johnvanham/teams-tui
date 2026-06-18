@@ -660,7 +660,39 @@ func (m Model) handleChats(msg chatsMsg) (tea.Model, tea.Cmd) {
 	}
 	// Refresh presence for whoever is in the (now-)current chat.
 	presCmd := loadPresencesCmd(m.ctx, m.client, m.currentChatParticipantIDs())
-	return m, tea.Batch(cmd, openCmd, presCmd)
+
+	// If the chat-list poll's preview shows the open chat has a message newer
+	// than our last sync, fetch it now instead of waiting for the next fast
+	// tick — this closes the window where a desktop notification fires before
+	// the message appears in the open conversation.
+	syncCmd := m.syncOpenChatIfBehind()
+	return m, tea.Batch(cmd, openCmd, presCmd, syncCmd)
+}
+
+// syncOpenChatIfBehind issues an incremental message fetch for the currently
+// open chat when the latest chat-list preview indicates a newer message than
+// we've synced. It relies on the same lastSync horizon the fast tick uses, so
+// the fetch is cheap and dedups naturally against the periodic poll. Returns
+// nil when there's nothing to do (no open chat, no baseline yet, or already up
+// to date).
+func (m Model) syncOpenChatIfBehind() tea.Cmd {
+	if m.client == nil || m.currentChat == "" {
+		return nil
+	}
+	since, ok := m.lastSync[m.currentChat]
+	if !ok {
+		// No baseline yet (chat just opened); a full load is already in flight.
+		return nil
+	}
+	c, ok := m.chats[m.currentChat]
+	if !ok {
+		return nil
+	}
+	prev := c.LastMessagePreview
+	if prev == nil || !prev.CreatedAt.After(since) {
+		return nil
+	}
+	return loadNewMessagesCmd(m.ctx, m.client, m.currentChat, since)
 }
 
 // handlePeople populates the contacts list from a people lookup. A failure
