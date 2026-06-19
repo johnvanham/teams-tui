@@ -185,7 +185,7 @@ registration first if your tenant requires it.
 | -------------- | ---------------------------------------- |
 | `tab` / `shift+tab` | Move focus between Chats / Messages / Compose |
 | `↑`/`↓` `j`/`k`| Navigate the focused pane; in Messages, move the message selection |
-| click          | In Messages, select the clicked message  |
+| click          | Select the clicked message (Messages); click the compose box to focus it |
 | `enter`        | Open selected chat (Chats) / send message (Compose) / start chat (Contacts) |
 | `r`            | React to the selected message (Messages): opens a searchable emoji picker; reacting with an emoji you already used removes it |
 | `q`            | Quote-reply to the selected message (Messages): prefills the composer with the quoted text |
@@ -196,6 +196,7 @@ registration first if your tenant requires it.
 | `ctrl+e`       | Edit a message: the selected message in the Messages pane if it's yours, otherwise your most recent message |
 | `ctrl+y` / click | Open an image in your default viewer/browser (`ctrl+y` = newest; click a placeholder for that one) |
 | `ctrl+v`       | Paste an image from the clipboard and attach it to the next message (type a caption, then `enter` to send; `esc` to discard) |
+| `esc`          | Clear the compose box (empties typed text, cancels an edit, discards a staged image) |
 | `ctrl+r`       | Refresh now                              |
 | `ctrl+s`       | Open the status picker (set your presence) |
 | `ctrl+g`       | Toggle full help                         |

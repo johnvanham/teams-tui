@@ -310,22 +310,42 @@ func (m Model) withinSidebar(x int) bool {
 	return x >= 1 && x < sidebarWidth-1
 }
 
+// composeTop is the screen Y of the compose box's top border. Below the
+// participants header sits the messages viewport (its content height plus its
+// top/bottom borders), then any open emoji/reaction picker, then the compose
+// box. A click at or below this row lands on the compose box.
+func (m Model) composeTop() int {
+	return m.messagesContentTop() + m.viewport.Height() + 1 /*viewport bottom border*/ +
+		m.emojiPickerHeight() + m.reactPickerHeight()
+}
+
+// withinCompose reports whether a screen Y coordinate falls on the compose box
+// (at or below its top border).
+func (m Model) withinCompose(y int) bool {
+	return y >= m.composeTop()
+}
+
 // handleMouseClick activates the clicked chat and jumps focus to compose.
 func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if m.phase != phaseReady || msg.Button != tea.MouseLeft {
 		return m, nil
 	}
 	if !m.withinSidebar(msg.X) {
-		// A click in the right column focuses the messages pane for scrolling.
 		if msg.X >= sidebarWidth {
+			// A click on the compose box focuses it so the user can type.
+			if m.withinCompose(msg.Y) {
+				m.focus = focusCompose
+				m.renderConversation() // drop the messages-pane selection highlight
+				return m, m.compose.Focus()
+			}
 			// A click directly on an image placeholder opens that image.
 			if idx, ok := m.imageAtY(msg.Y); ok {
 				return m.viewImageAt(idx)
 			}
+			// Otherwise it's a click in the messages pane: focus it and select
+			// the clicked message so react/quote act on it.
 			m.focus = focusMessages
 			m.compose.Blur()
-			// Select the clicked message so react/quote act on it; re-render to
-			// move the highlight to it.
 			if idx, ok := m.msgAtY(msg.Y); ok {
 				m.selectedMsg = idx
 			}
@@ -581,15 +601,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Compose-specific: Enter sends, alt+enter inserts a newline. (Emoji-picker
 	// navigation/selection keys are intercepted earlier, before pane switching.)
 	if m.focus == focusCompose {
-		// Esc cancels an in-progress edit, restoring the compose box to a
-		// fresh (new-message) state.
-		if m.editingMsgID != "" && msg.String() == "esc" {
-			m.cancelEdit()
-			return m, nil
-		}
-		// Esc also discards a staged clipboard image (when not editing).
-		if len(m.pendingImage) > 0 && msg.String() == "esc" {
+		// Esc clears the compose box: it empties any typed text, exits an
+		// in-progress edit (restoring the new-message state), discards a staged
+		// clipboard image, and dismisses the emoji popup.
+		if msg.String() == "esc" {
+			m.editingMsgID = ""
 			m.clearPendingImage()
+			m.compose.Reset()
+			m.closeEmojiPicker()
+			m.layout()
 			return m, nil
 		}
 		if key.Matches(msg, m.keys.Send) {
@@ -1662,14 +1682,6 @@ func (m Model) quoteSelected() (tea.Model, tea.Cmd) {
 func (m *Model) clearPendingImage() {
 	m.pendingImage = nil
 	m.pendingImageCT = ""
-}
-
-// cancelEdit leaves edit mode and clears the compose box.
-func (m *Model) cancelEdit() {
-	m.editingMsgID = ""
-	m.compose.Reset()
-	m.closeEmojiPicker()
-	m.layout()
 }
 
 // latestOwnMessage returns the signed-in user's most recent non-deleted message
