@@ -6,6 +6,18 @@ package notify
 
 import "github.com/gen2brain/beeep"
 
+// appName is the application name shown by the desktop notification daemon
+// (e.g. as the title/source on GNOME). beeep defaults this to "DefaultAppName";
+// we override it so notifications are attributed to this app instead.
+const appName = "Teams Chat"
+
+func init() {
+	// beeep.AppName is a package-level setting consumed on each Notify/Alert
+	// call (the D-Bus app_name on Linux, the toast AppID on Windows, the
+	// notification group on macOS). Set it once at load time.
+	beeep.AppName = appName
+}
+
 // Notifier fires desktop notifications when enabled. The notify/alert backends
 // are function fields so tests can capture calls without touching the OS.
 type Notifier struct {
