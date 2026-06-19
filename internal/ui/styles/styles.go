@@ -168,6 +168,16 @@ var (
 			Foreground(lipgloss.Color("#E0E0F0")).
 			Background(CodeBlockBg)
 
+	// MessageSelected marks the currently selected message in the messages
+	// pane (a small caret before its header) so react/quote targets are clear.
+	MessageSelected = lipgloss.NewStyle().Foreground(Orange).Bold(true)
+
+	// Quote styles the text of a quoted reply (a ">"-prefixed run in a message
+	// body). QuoteBar colours the left bar that marks the quoted block.
+	Quote = lipgloss.NewStyle().Foreground(LightGrey).Italic(true)
+
+	QuoteBar = lipgloss.NewStyle().Foreground(Purple)
+
 	// EmojiPicker frames the inline emoji autocomplete popup shown above the
 	// compose box while typing a :shortcode:.
 	EmojiPicker = lipgloss.NewStyle().

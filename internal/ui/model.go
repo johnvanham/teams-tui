@@ -101,6 +101,9 @@ type Model struct {
 	people          []graph.Person            // contacts currently shown in the sidebar
 	convImages      []graph.ImageRef          // images in the open chat, display order
 	imageLines      map[int]int               // viewport content line -> convImages index
+	convMsgs        []graph.Message           // open chat's messages in display (oldest-first) order
+	msgLineStart    []int                     // convMsgs[i] -> viewport content line of its header
+	selectedMsg     int                       // index into convMsgs of the highlighted message (-1 = none)
 	openingImage    bool                      // an image download/open is in flight
 	editingMsgID    string                    // message ID being edited ("" if composing new)
 	pendingImage    []byte                    // image pasted from the clipboard, awaiting send
@@ -116,6 +119,14 @@ type Model struct {
 	emojiMatches []graph.EmojiShortcode // current matches for the typed prefix
 	emojiSel     int                    // highlighted match index
 	emojiQuery   string                 // the typed token (without leading ':')
+
+	// Reaction picker (opened with "r" on a selected message): a searchable
+	// emoji chooser whose selection is POSTed as a reaction.
+	reactPicker  bool                   // reaction overlay shown
+	reactQuery   string                 // typed search text (shortcode prefix)
+	reactMatches []graph.EmojiShortcode // current matches for reactQuery
+	reactSel     int                    // highlighted match index
+	reactMsgID   string                 // message being reacted to
 
 	// Transient notices.
 	errText     string
@@ -202,6 +213,7 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 		keys:          defaultKeyMap(),
 		phase:         phaseAuthStarting,
 		focus:         focusChats,
+		selectedMsg:   -1,
 		messages:      make(map[string][]graph.Message),
 		chats:         make(map[string]graph.Chat),
 		presences:     make(map[string]graph.Presence),

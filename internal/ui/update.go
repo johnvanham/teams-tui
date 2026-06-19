@@ -159,6 +159,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Refresh the chat so the edited text (and Teams' "Edited" marker) show.
 		return m, loadMessagesCmd(m.ctx, m.client, msg.chatID)
 
+	case reactedMsg:
+		if msg.err != nil {
+			m.errText = "Couldn't update reaction: " + msg.err.Error()
+			return m, nil
+		}
+		// Refresh so the updated reaction summary appears under the message.
+		return m, loadMessagesCmd(m.ctx, m.client, msg.chatID)
+
 	case meetingsMsg:
 		return m.handleMeetings(msg)
 
@@ -268,6 +276,34 @@ func (m Model) imageAtY(y int) (int, bool) {
 	return idx, ok
 }
 
+// msgAtY maps a screen Y coordinate to the index of the message that owns that
+// row in the conversation, using msgLineStart recorded during rendering. A click
+// anywhere within a message's block (from its header down to just before the
+// next message) selects that message.
+func (m Model) msgAtY(y int) (int, bool) {
+	if m.currentChat == "" || len(m.msgLineStart) == 0 {
+		return 0, false
+	}
+	rowInPane := y - m.messagesContentTop()
+	if rowInPane < 0 || rowInPane >= m.viewport.Height() {
+		return 0, false
+	}
+	contentLine := m.viewport.YOffset() + rowInPane
+	// Find the last message whose header starts at or before this line.
+	idx := -1
+	for i, start := range m.msgLineStart {
+		if start <= contentLine {
+			idx = i
+		} else {
+			break
+		}
+	}
+	if idx < 0 {
+		return 0, false
+	}
+	return idx, true
+}
+
 // withinSidebar reports whether an X coordinate falls inside the sidebar
 // column (excluding its left/right borders).
 func (m Model) withinSidebar(x int) bool {
@@ -288,6 +324,12 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 			}
 			m.focus = focusMessages
 			m.compose.Blur()
+			// Select the clicked message so react/quote act on it; re-render to
+			// move the highlight to it.
+			if idx, ok := m.msgAtY(msg.Y); ok {
+				m.selectedMsg = idx
+			}
+			m.renderConversation()
 		}
 		return m, nil
 	}
@@ -406,6 +448,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleStatusPickerKey(msg)
 	}
 
+	// Reaction picker captures all input while open.
+	if m.reactPicker {
+		return m.handleReactPickerKey(msg)
+	}
+
 	// Open the status picker.
 	if key.Matches(msg, m.keys.Status) {
 		m.showStatus = true
@@ -507,6 +554,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.refreshCmd()
 	}
 
+	// Messages pane: selection navigation and the react/quote actions are
+	// handled here, before the jump-to-compose shortcut, so j/k/r/q act on the
+	// selected message instead of being typed into the composer.
+	if m.focus == focusMessages {
+		return m.handleMessagesPaneKey(msg)
+	}
+
 	// Quality-of-life: if the user starts typing a printable character while
 	// the chat list or messages pane is focused, jump straight to the compose
 	// box and feed the keystroke there. This excludes "/" (which starts list
@@ -597,14 +651,67 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	}
 
-	// Messages pane: scroll the viewport, loading older history at the top.
-	if m.focus == focusMessages {
-		var cmd tea.Cmd
-		m.viewport, cmd = m.viewport.Update(msg)
-		return m, tea.Batch(cmd, m.maybeLoadOlder())
-	}
-
 	return m, nil
+}
+
+// handleMessagesPaneKey handles input while the messages pane is focused:
+// up/down (and k/j) move the message selection (auto-scrolling to keep it in
+// view); page/home/end scroll the viewport directly; r reacts to the selected
+// message (toggling off if already reacted with the chosen emoji); q quotes it
+// into a reply. Other keys fall through to viewport scrolling.
+func (m Model) handleMessagesPaneKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		return m.moveSelection(-1)
+	case "down", "j":
+		return m.moveSelection(1)
+	case "g", "home":
+		if len(m.convMsgs) > 0 {
+			m.selectedMsg = 0
+			m.renderConversation()
+			m.scrollToSelection()
+		}
+		return m, m.maybeLoadOlder()
+	case "G", "end":
+		if len(m.convMsgs) > 0 {
+			m.selectedMsg = len(m.convMsgs) - 1
+			m.renderConversation()
+			m.scrollToSelection()
+		}
+		return m, nil
+	case "r":
+		return m.reactToSelected()
+	case "q":
+		return m.quoteSelected()
+	}
+	// Anything else (pgup/pgdn, etc.): plain viewport scroll, loading older
+	// history when scrolled near the top.
+	var cmd tea.Cmd
+	m.viewport, cmd = m.viewport.Update(msg)
+	return m, tea.Batch(cmd, m.maybeLoadOlder())
+}
+
+// moveSelection shifts the selected message by delta (clamped to the ends),
+// re-renders so the highlight moves, scrolls to keep it visible, and loads older
+// history if the selection reaches the top.
+func (m Model) moveSelection(delta int) (tea.Model, tea.Cmd) {
+	if len(m.convMsgs) == 0 {
+		return m, nil
+	}
+	m.selectedMsg += delta
+	if m.selectedMsg < 0 {
+		m.selectedMsg = 0
+	}
+	if m.selectedMsg >= len(m.convMsgs) {
+		m.selectedMsg = len(m.convMsgs) - 1
+	}
+	m.renderConversation()
+	m.scrollToSelection()
+	var older tea.Cmd
+	if m.selectedMsg == 0 {
+		older = m.maybeLoadOlder()
+	}
+	return m, older
 }
 
 func (m Model) handleChats(msg chatsMsg) (tea.Model, tea.Cmd) {
@@ -1146,6 +1253,13 @@ func (m *Model) cycleFocus(dir int) {
 // focusCmd applies focus/blur side effects (textarea cursor) and returns any
 // resulting command.
 func (m *Model) focusCmd() tea.Cmd {
+	// Re-render so the message-selection highlight shows only while the messages
+	// pane is focused (and is removed when focus moves elsewhere). Keep the
+	// selection visible when entering the pane.
+	m.renderConversation()
+	if m.focus == focusMessages {
+		m.scrollToSelection()
+	}
 	if m.focus == focusCompose {
 		return m.compose.Focus()
 	}
@@ -1395,14 +1509,22 @@ func (m Model) trySend() (tea.Model, tea.Cmd) {
 	return m, sendMessageCmd(m.ctx, m.client, chatID, text)
 }
 
-// startEdit loads the signed-in user's most recent (non-deleted) message in the
-// current chat into the compose box for an in-place edit. The message's
-// plaintext becomes the editable buffer; Enter commits the edit, Esc cancels.
+// startEdit loads one of the signed-in user's messages into the compose box for
+// an in-place edit and focuses the composer. When a message is selected in the
+// messages pane and it belongs to the user, that message is edited; otherwise it
+// falls back to the user's most recent message. Enter commits the edit, Esc
+// cancels.
 func (m Model) startEdit() (tea.Model, tea.Cmd) {
 	if m.currentChat == "" || m.me == nil {
 		return m, nil
 	}
-	msg, ok := m.latestOwnMessage(m.currentChat)
+	// Prefer the currently selected message if it's the user's own (so clicking
+	// a message and pressing edit edits that one). Deleted messages can't be
+	// edited.
+	msg, ok := m.editableSelection()
+	if !ok {
+		msg, ok = m.latestOwnMessage(m.currentChat)
+	}
 	if !ok {
 		m.errText = "No message of yours to edit in this chat."
 		return m, nil
@@ -1411,6 +1533,127 @@ func (m Model) startEdit() (tea.Model, tea.Cmd) {
 	m.sidebarMode = sidebarChats
 	m.focus = focusCompose
 	m.compose.SetValue(msg.Body.PlainText())
+	m.layout()
+	return m, m.compose.Focus()
+}
+
+// editableSelection returns the selected message when it is the signed-in user's
+// own, non-deleted message (the candidate for an in-place edit).
+func (m Model) editableSelection() (graph.Message, bool) {
+	sel, ok := m.selectedMessage()
+	if !ok || m.me == nil || sel.DeletedAt != nil {
+		return graph.Message{}, false
+	}
+	if sel.From == nil || sel.From.User == nil || sel.From.User.ID != m.me.ID {
+		return graph.Message{}, false
+	}
+	return sel, true
+}
+
+// reactToSelected opens the reaction emoji picker for the selected message so
+// the user can choose an emoji to react with. The actual POST happens when they
+// pick one (handleReactPickerKey).
+func (m Model) reactToSelected() (tea.Model, tea.Cmd) {
+	sel, ok := m.selectedMessage()
+	if !ok || sel.ID == "" {
+		return m, nil
+	}
+	m.openReactPicker(sel.ID)
+	m.layout()
+	return m, nil
+}
+
+// handleReactPickerKey handles input while the reaction picker is open: typing
+// filters the emoji, up/down move the highlight, enter applies the reaction
+// (toggling it off if the user already reacted with that emoji), and esc
+// cancels.
+func (m Model) handleReactPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.closeReactPicker()
+		m.layout()
+		return m, nil
+	case "up", "ctrl+p":
+		m.reactPickerMove(-1)
+		return m, nil
+	case "down", "ctrl+n":
+		m.reactPickerMove(1)
+		return m, nil
+	case "backspace":
+		if r := []rune(m.reactQuery); len(r) > 0 {
+			m.reactQuery = string(r[:len(r)-1])
+			m.reactSel = 0
+			m.refreshReactMatches()
+			m.layout()
+		}
+		return m, nil
+	case "enter":
+		return m.applyReaction()
+	}
+	// Printable characters extend the search query.
+	if msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0 {
+		m.reactQuery += msg.Text
+		m.reactSel = 0
+		m.refreshReactMatches()
+		m.layout()
+	}
+	return m, nil
+}
+
+// applyReaction posts (or removes) the highlighted reaction for the message the
+// picker was opened on. If the signed-in user already reacted to that message
+// with the chosen emoji, the reaction is toggled off; otherwise it's added.
+func (m Model) applyReaction() (tea.Model, tea.Cmd) {
+	glyph, ok := m.selectedReaction()
+	msgID := m.reactMsgID
+	chatID := m.currentChat
+	m.closeReactPicker()
+	m.layout()
+	if !ok || msgID == "" || chatID == "" || m.client == nil {
+		return m, nil
+	}
+	// Decide add vs. remove from the message's current reactions.
+	remove := false
+	if self := m.selfID(); self != "" {
+		for _, msg := range m.convMsgs {
+			if msg.ID == msgID {
+				remove = msg.UserReacted(self, glyph)
+				break
+			}
+		}
+	}
+	return m, reactCmd(m.ctx, m.client, chatID, msgID, glyph, remove)
+}
+
+// quoteSelected prefills the compose box with the selected message quoted as a
+// blockquote and moves focus to compose so the user can type their reply. The
+// "> "-prefixed lines round-trip through ComposeHTML into a <blockquote> on
+// send (see graph/compose.go).
+func (m Model) quoteSelected() (tea.Model, tea.Cmd) {
+	sel, ok := m.selectedMessage()
+	if !ok {
+		return m, nil
+	}
+	text := sel.Body.PlainText()
+	if sel.DeletedAt != nil {
+		text = "(message deleted)"
+	}
+	var b strings.Builder
+	b.WriteString("> ")
+	b.WriteString(sel.SenderName())
+	b.WriteString(" wrote:\n")
+	for _, ln := range strings.Split(text, "\n") {
+		b.WriteString("> ")
+		b.WriteString(ln)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n") // blank line so the reply starts below the quote
+	// Preserve any half-typed reply by appending the quote prefix in front of it
+	// only when the composer is empty; otherwise prepend the quote.
+	existing := m.compose.Value()
+	m.compose.SetValue(b.String() + existing)
+	m.compose.MoveToEnd()
+	m.focus = focusCompose
 	m.layout()
 	return m, m.compose.Focus()
 }

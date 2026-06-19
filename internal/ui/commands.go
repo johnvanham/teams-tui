@@ -73,6 +73,12 @@ type editedMsg struct {
 	err    error
 }
 
+// reactedMsg signals a reaction was added/removed so the chat can refresh.
+type reactedMsg struct {
+	chatID string
+	err    error
+}
+
 // peopleMsg carries the loaded contacts (people) for the sidebar's contacts
 // mode. err is set when the lookup failed (e.g. People.Read unconsented).
 type peopleMsg struct {
@@ -243,6 +249,22 @@ func sendMessageCmd(ctx context.Context, c *graph.Client, chatID, text string) t
 			return errMsg{err}
 		}
 		return sentMsg{chatID: chatID}
+	}
+}
+
+// reactCmd adds or removes a reaction on a message. When remove is true it
+// calls UnsetReaction (toggling an existing reaction off); otherwise it adds the
+// reaction with SetReaction. Either way it reports completion via reactedMsg so
+// the chat can refresh and show the updated reaction summary.
+func reactCmd(ctx context.Context, c *graph.Client, chatID, messageID, emoji string, remove bool) tea.Cmd {
+	return func() tea.Msg {
+		var err error
+		if remove {
+			err = c.UnsetReaction(ctx, chatID, messageID, emoji)
+		} else {
+			err = c.SetReaction(ctx, chatID, messageID, emoji)
+		}
+		return reactedMsg{chatID: chatID, err: err}
 	}
 }
 

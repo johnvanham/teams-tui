@@ -19,6 +19,8 @@ type keyMap struct {
 	Quit     key.Binding
 	Up       key.Binding
 	Down     key.Binding
+	React    key.Binding
+	Quote    key.Binding
 }
 
 func defaultKeyMap() keyMap {
@@ -71,6 +73,14 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("down", "j"),
 			key.WithHelp("↓/j", "down"),
 		),
+		React: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "react (msgs)"),
+		),
+		Quote: key.NewBinding(
+			key.WithKeys("q"),
+			key.WithHelp("q", "quote (msgs)"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("ctrl+g", "f1", "?"),
 			key.WithHelp("ctrl+g", "help"),
@@ -92,7 +102,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.NextPane, k.PrevPane},
 		{k.Send, k.Newline, k.Edit, k.Image, k.Paste},
-		{k.Contacts, k.Status, k.Refresh},
+		{k.React, k.Quote, k.Contacts, k.Status, k.Refresh},
 		{k.Help, k.Quit},
 	}
 }

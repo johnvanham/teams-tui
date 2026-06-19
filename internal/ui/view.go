@@ -90,7 +90,7 @@ func (m *Model) layout() {
 	// Reserve one row for the participants/presence header above the messages,
 	// plus the inline emoji popup's rows when it is open (it sits between the
 	// messages and the compose box, stealing height from the viewport).
-	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight()
+	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight() - m.reactPickerHeight()
 	if vpInnerH < 1 {
 		vpInnerH = 1
 	}
@@ -250,6 +250,9 @@ func (m Model) viewReady() string {
 	if m.emojiPicker {
 		rightParts = append(rightParts, m.viewEmojiPicker())
 	}
+	if m.reactPicker {
+		rightParts = append(rightParts, m.viewReactPicker())
+	}
 	rightParts = append(rightParts, compose)
 	right := lipgloss.JoinVertical(lipgloss.Left, rightParts...)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, right)
@@ -383,6 +386,43 @@ func (m Model) emojiPickerHeight() int {
 	return len(m.emojiMatches) + 1 + 2 // rows + hint + top/bottom border
 }
 
+// reactPickerHeight returns the rows the reaction picker occupies when open
+// (one row per emoji + a query/hint row + the box border), or 0 when closed.
+// layout() subtracts this from the messages viewport like the emoji picker.
+func (m Model) reactPickerHeight() int {
+	if !m.reactPicker {
+		return 0
+	}
+	n := len(m.reactMatches)
+	if n == 0 {
+		n = 1 // still show the "no matches" row
+	}
+	return n + 1 + 2 // rows + query/hint + top/bottom border
+}
+
+// viewReactPicker renders the reaction emoji chooser as a small bordered list
+// with a search line. Each row shows the glyph and its :shortcode:; the
+// highlighted row is reverse-styled.
+func (m Model) viewReactPicker() string {
+	rows := make([]string, 0, len(m.reactMatches)+1)
+	query := "React: " + m.reactQuery
+	rows = append(rows, styles.Hint.Render(query+"▌"))
+	if len(m.reactMatches) == 0 {
+		rows = append(rows, styles.EmojiPickerItem.Render(" no matching emoji "))
+	}
+	for i, e := range m.reactMatches {
+		label := e.Emoji + "  :" + e.Name + ":"
+		if i == m.reactSel {
+			rows = append(rows, styles.EmojiPickerSelected.Render(" "+label+" "))
+		} else {
+			rows = append(rows, styles.EmojiPickerItem.Render(" "+label+" "))
+		}
+	}
+	hint := styles.Hint.Render("type to search · ↑↓ select · enter react · esc cancel")
+	body := lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinVertical(lipgloss.Left, rows...), hint)
+	return styles.EmojiPicker.Render(body)
+}
+
 // viewEmojiPicker renders the inline emoji autocomplete suggestions as a small
 // bordered list. Each row shows the glyph and its :shortcode:; the highlighted
 // row is reverse-styled. A hint line documents the navigation/accept keys.
@@ -489,10 +529,12 @@ func (m Model) activeBanner() string {
 
 // renderConversation formats the current chat's messages into the viewport.
 func (m *Model) renderConversation() {
-	// Reset click/keybinding image state up front so every early return below
-	// leaves no stale placeholders from a previously open chat.
+	// Reset click/keybinding image + selection state up front so every early
+	// return below leaves no stale data from a previously open chat.
 	m.convImages = m.convImages[:0]
 	m.imageLines = nil
+	m.convMsgs = nil
+	m.msgLineStart = nil
 	if m.currentChat == "" {
 		m.viewport.SetContent(styles.Hint.Render("Select a chat to start messaging."))
 		return
@@ -516,24 +558,39 @@ func (m *Model) renderConversation() {
 		return ordered[i].CreatedAt.Before(ordered[j].CreatedAt)
 	})
 
-	width := m.viewport.Width()
-	var b strings.Builder
-	// Collect every image in the conversation, in display order, so the image
-	// keybinding can reference them by number ("open image [2]"). line tracks
-	// the current 0-based content line so we can map a click on a placeholder
-	// row back to its image (imageLines).
-	m.imageLines = make(map[int]int)
-	line := 0
+	// Keep only renderable messages (those with text or images), in display
+	// order, so selection indexes line up with what's on screen. convMsgs is the
+	// source of truth for the select/react/quote actions.
+	visible := ordered[:0:0]
 	for _, msg := range ordered {
 		text := msg.Body.PlainText()
 		if msg.DeletedAt != nil {
 			text = "(message deleted)"
 		}
-		images := msg.Images()
-		// Skip truly empty messages (no text and no images).
-		if text == "" && len(images) == 0 {
+		if text == "" && len(msg.Images()) == 0 {
 			continue
 		}
+		visible = append(visible, msg)
+	}
+	m.convMsgs = visible
+	m.clampSelection()
+
+	width := m.viewport.Width()
+	var b strings.Builder
+	// Collect every image in the conversation, in display order, so the image
+	// keybinding can reference them by number ("open image [2]"). line tracks
+	// the current 0-based content line so we can map a click on a placeholder
+	// row back to its image (imageLines), and a message's header row back to its
+	// index (msgLineStart).
+	m.imageLines = make(map[int]int)
+	m.msgLineStart = make([]int, len(m.convMsgs))
+	line := 0
+	for i, msg := range m.convMsgs {
+		text := msg.Body.PlainText()
+		if msg.DeletedAt != nil {
+			text = "(message deleted)"
+		}
+		images := msg.Images()
 		name := msg.SenderName()
 		nameStyle := styles.SenderName
 		if m.me != nil && msg.From != nil && msg.From.User != nil && msg.From.User.ID == m.me.ID {
@@ -541,6 +598,12 @@ func (m *Model) renderConversation() {
 		}
 		ts := msg.CreatedAt.Local().Format("15:04")
 		header := nameStyle.Render(name) + " " + styles.Timestamp.Render(ts)
+		// Highlight the selected message's header while the messages pane is the
+		// active pane, so it's clear which message react/quote will act on.
+		if i == m.selectedMsg && m.focus == focusMessages {
+			header = styles.MessageSelected.Render("› ") + header
+		}
+		m.msgLineStart[i] = line
 		b.WriteString(header)
 		b.WriteString("\n")
 		line++ // header row
@@ -577,6 +640,46 @@ func (m *Model) renderConversation() {
 	m.viewport.SetContent(strings.TrimRight(b.String(), "\n"))
 }
 
+// clampSelection keeps selectedMsg within the bounds of the currently visible
+// messages. When there is no valid selection yet (e.g. a chat just opened) it
+// defaults to the newest (last) message so the messages pane has something
+// highlighted as soon as it's focused.
+func (m *Model) clampSelection() {
+	n := len(m.convMsgs)
+	if n == 0 {
+		m.selectedMsg = -1
+		return
+	}
+	if m.selectedMsg < 0 || m.selectedMsg >= n {
+		m.selectedMsg = n - 1
+	}
+}
+
+// selectedMessage returns the currently selected message, if any.
+func (m Model) selectedMessage() (graph.Message, bool) {
+	if m.selectedMsg < 0 || m.selectedMsg >= len(m.convMsgs) {
+		return graph.Message{}, false
+	}
+	return m.convMsgs[m.selectedMsg], true
+}
+
+// scrollToSelection adjusts the viewport so the selected message's header is
+// visible, nudging the offset only when the selection sits outside the current
+// window. Keeps keyboard navigation from running the selection off-screen.
+func (m *Model) scrollToSelection() {
+	if m.selectedMsg < 0 || m.selectedMsg >= len(m.msgLineStart) {
+		return
+	}
+	top := m.msgLineStart[m.selectedMsg]
+	height := m.viewport.Height()
+	off := m.viewport.YOffset()
+	if top < off {
+		m.viewport.SetYOffset(top)
+	} else if top >= off+height {
+		m.viewport.SetYOffset(top - height + 1)
+	}
+}
+
 // codeFence is the marker line graph.MessageBody.PlainText emits around code
 // blocks (a Markdown triple backtick, with an optional language on the opening
 // fence). renderBody keys off it to style code distinctly from prose.
@@ -608,9 +711,55 @@ func renderBody(text string, width int, codeStyle *chroma.Style) string {
 			out = append(out, renderCodeBlock(code, lang, width, codeStyle))
 			continue
 		}
+		// A run of ">"-prefixed lines is a quoted reply: collect the whole run
+		// and render it as one styled block with a left bar.
+		if isQuoteLine(line) {
+			var quote []string
+			for ; i < len(lines) && isQuoteLine(lines[i]); i++ {
+				quote = append(quote, stripQuotePrefix(lines[i]))
+			}
+			i-- // the loop's i++ will advance past the last quote line
+			out = append(out, renderQuote(quote, width))
+			continue
+		}
 		out = append(out, wrapLineInline(line, width))
 	}
 	return strings.Join(out, "\n")
+}
+
+// isQuoteLine reports whether a rendered body line is a Markdown-style quote
+// line (">" optionally followed by a space). Mirrors graph.isQuoteLine on the
+// send side so quoting round-trips.
+func isQuoteLine(line string) bool {
+	return strings.HasPrefix(strings.TrimLeft(line, " "), ">")
+}
+
+// stripQuotePrefix removes the leading ">" (and one following space) from a
+// quote line, returning the quoted text.
+func stripQuotePrefix(line string) string {
+	t := strings.TrimLeft(line, " ")
+	t = strings.TrimPrefix(t, ">")
+	return strings.TrimPrefix(t, " ")
+}
+
+// renderQuote styles a run of quoted lines as a block with a coloured left bar,
+// word-wrapping the quoted text to the remaining width. Inline `code` spans in
+// the quote are styled like normal prose.
+func renderQuote(quote []string, width int) string {
+	const bar = "▌ "
+	barW := lipgloss.Width(bar)
+	textW := width - barW
+	if textW < 1 {
+		textW = 1
+	}
+	var rows []string
+	for _, q := range quote {
+		wrapped := wrapLineInline(q, textW)
+		for _, wl := range strings.Split(wrapped, "\n") {
+			rows = append(rows, styles.QuoteBar.Render(bar)+styles.Quote.Render(wl))
+		}
+	}
+	return strings.Join(rows, "\n")
 }
 
 // renderCodeBlock styles a code block's lines as one dim panel. Each line is

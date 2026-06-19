@@ -184,13 +184,16 @@ registration first if your tenant requires it.
 | Key            | Action                                   |
 | -------------- | ---------------------------------------- |
 | `tab` / `shift+tab` | Move focus between Chats / Messages / Compose |
-| `↑`/`↓` `j`/`k`| Navigate the focused pane                |
+| `↑`/`↓` `j`/`k`| Navigate the focused pane; in Messages, move the message selection |
+| click          | In Messages, select the clicked message  |
 | `enter`        | Open selected chat (Chats) / send message (Compose) / start chat (Contacts) |
+| `r`            | React to the selected message (Messages): opens a searchable emoji picker; reacting with an emoji you already used removes it |
+| `q`            | Quote-reply to the selected message (Messages): prefills the composer with the quoted text |
 | `alt+enter`    | Insert a newline in the compose box      |
 | `:` + 2 chars  | Open the inline emoji picker while composing (`↑`/`↓` select, `tab`/`enter` insert, `esc` close) |
 | `/`            | Filter the chat list / search contacts   |
 | `ctrl+o`       | Toggle the sidebar between Chats and Contacts (start a new chat) |
-| `ctrl+e`       | Edit your most recent message            |
+| `ctrl+e`       | Edit a message: the selected message in the Messages pane if it's yours, otherwise your most recent message |
 | `ctrl+y` / click | Open an image in your default viewer/browser (`ctrl+y` = newest; click a placeholder for that one) |
 | `ctrl+v`       | Paste an image from the clipboard and attach it to the next message (type a caption, then `enter` to send; `esc` to discard) |
 | `ctrl+r`       | Refresh now                              |
@@ -226,6 +229,10 @@ and `ui/highlight.go` syntax-highlights the rendered block using a
 - Reading tokens is intentionally avoided in code; tokens are treated as opaque
   per Microsoft guidance.
 - Message history is fetched per chat on demand and refreshed on the poll tick.
+- Quote-replies round-trip through the same three places as code blocks: a
+  `> `-prefixed run in the composer becomes a `<blockquote>` (`graph/compose.go`),
+  any incoming `<blockquote>` is converted back to `> ` lines (`graph/text.go`),
+  and the renderer styles those lines with a left bar (`ui/view.go`).
 - Chats with unread messages are shown in orange text in the sidebar (the
   selected chat keeps its pink highlight). Unread state comes from Graph's
   per-chat `viewpoint` read marker; opening a chat marks it read locally and on
@@ -234,7 +241,10 @@ and `ui/highlight.go` syntax-highlights the rendered block using a
   unread.
 - This is a chat-focused client; it does not implement calls, channels/teams
   browsing, files, or app tabs.
-- Reactions are rendered; threaded replies are not.
+- Reactions are rendered and can be added/removed (`r` on a selected message,
+  via `setReaction`/`unsetReaction`, covered by `Chat.ReadWrite`). Quote-replies
+  are sent as a `<blockquote>` and rendered with a left bar; Teams' native
+  threaded replies are not used.
 - Images in messages are shown as placeholders (`🖼 [n] name`); press `ctrl+y`
   to open the newest one, or click a placeholder to open that specific image, in
   your OS default image viewer/browser (inline Graph hosted content is
