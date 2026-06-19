@@ -49,6 +49,19 @@ func ComposeHTML(text string) string {
 			continue
 		}
 
+		// Quote: collect consecutive ">"-prefixed lines into one <blockquote>
+		// so a multi-line quote renders as a single quoted region for every
+		// participant (matching how Teams stores quoted replies).
+		if isQuoteLine(line) {
+			var quote []string
+			for ; i < len(lines) && isQuoteLine(lines[i]); i++ {
+				quote = append(quote, stripQuotePrefix(lines[i]))
+			}
+			i-- // the outer loop's i++ will advance past the last quote line
+			b.WriteString(composeBlockquote(quote))
+			continue
+		}
+
 		b.WriteString(composeParagraph(line))
 	}
 
@@ -71,6 +84,35 @@ func composeCodeBlock(code []string, lang string) string {
 		attrs = ` data-language="` + l + `" class="language-` + l + `"`
 	}
 	return "<pre" + attrs + "><code>" + body + "</code></pre>"
+}
+
+// isQuoteLine reports whether a compose line is a Markdown-style quote line: a
+// ">" optionally followed by a space, then the quoted text. A bare ">" (empty
+// quoted line) also counts.
+func isQuoteLine(line string) bool {
+	t := strings.TrimLeft(line, " ")
+	return strings.HasPrefix(t, ">")
+}
+
+// stripQuotePrefix removes the leading ">" (and a single following space) from a
+// quote line, returning the quoted text.
+func stripQuotePrefix(line string) string {
+	t := strings.TrimLeft(line, " ")
+	t = strings.TrimPrefix(t, ">")
+	return strings.TrimPrefix(t, " ")
+}
+
+// composeBlockquote renders quoted lines as a single <blockquote>, with each
+// line as its own <p> (HTML-escaped, inline `code` styled) so line breaks in
+// the quote survive. Empty quoted lines become empty paragraphs.
+func composeBlockquote(lines []string) string {
+	var b strings.Builder
+	b.WriteString("<blockquote>")
+	for _, line := range lines {
+		b.WriteString(composeParagraph(line))
+	}
+	b.WriteString("</blockquote>")
+	return b.String()
 }
 
 // composeParagraph renders a single prose line as a <p>, escaping it and styling

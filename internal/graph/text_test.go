@@ -37,6 +37,22 @@ func TestMessageBodyPlainText(t *testing.T) {
 			},
 			want: "a & b",
 		},
+		{
+			name: "blockquote becomes quoted lines",
+			body: MessageBody{
+				ContentType: "html",
+				Content:     `<blockquote><p>quoted</p></blockquote><p>my reply</p>`,
+			},
+			want: "> quoted\nmy reply",
+		},
+		{
+			name: "multi-paragraph blockquote",
+			body: MessageBody{
+				ContentType: "html",
+				Content:     `<blockquote><p>one</p><p>two</p></blockquote>`,
+			},
+			want: "> one\n> two",
+		},
 	}
 
 	for _, tt := range tests {

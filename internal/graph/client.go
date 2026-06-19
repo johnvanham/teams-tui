@@ -433,6 +433,38 @@ func (c *Client) EditMessage(ctx context.Context, chatID, messageID, text string
 	return &Message{ID: messageID, Body: MessageBody{ContentType: "html", Content: htmlBody}}, nil
 }
 
+// SetReaction adds a reaction (a Unicode emoji) to a chat message via
+// POST /chats/{chat-id}/messages/{message-id}/setReaction. reactionType is the
+// Unicode emoji character itself (e.g. "👍"), matching what Graph stores and
+// Reaction.Emoji renders. Graph returns 204 No Content on success, so there is
+// no body to decode. Requires Chat.ReadWrite (already in DefaultScopes).
+func (c *Client) SetReaction(ctx context.Context, chatID, messageID, reactionType string) error {
+	payload := map[string]string{"reactionType": reactionType}
+	buf, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	path := fmt.Sprintf("/chats/%s/messages/%s/setReaction",
+		url.PathEscape(chatID), url.PathEscape(messageID))
+	return c.do(ctx, http.MethodPost, path, bytes.NewReader(buf), nil, nil)
+}
+
+// UnsetReaction removes the signed-in user's reaction of the given type from a
+// chat message via POST /chats/{chat-id}/messages/{message-id}/unsetReaction.
+// reactionType must match the emoji previously set. Like SetReaction it returns
+// 204 No Content on success. Used to toggle a reaction off when the user
+// re-reacts with the same emoji they already applied.
+func (c *Client) UnsetReaction(ctx context.Context, chatID, messageID, reactionType string) error {
+	payload := map[string]string{"reactionType": reactionType}
+	buf, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	path := fmt.Sprintf("/chats/%s/messages/%s/unsetReaction",
+		url.PathEscape(chatID), url.PathEscape(messageID))
+	return c.do(ctx, http.MethodPost, path, bytes.NewReader(buf), nil, nil)
+}
+
 // SendImageMessage posts a chat message with an inline image. Teams carries
 // inline images as "hosted content": the image bytes are base64-encoded into a
 // hostedContents entry tagged with a temporary id, and the HTML body references

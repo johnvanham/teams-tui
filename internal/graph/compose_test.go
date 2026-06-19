@@ -58,6 +58,21 @@ func TestComposeHTML(t *testing.T) {
 			in:   "```\nx = 1",
 			want: "<pre><code>x = 1</code></pre>",
 		},
+		{
+			name: "single quote line",
+			in:   "> hello",
+			want: "<blockquote><p>hello</p></blockquote>",
+		},
+		{
+			name: "multi-line quote groups into one blockquote",
+			in:   "> line one\n> line two",
+			want: "<blockquote><p>line one</p><p>line two</p></blockquote>",
+		},
+		{
+			name: "quote then reply",
+			in:   "> quoted\nmy reply",
+			want: "<blockquote><p>quoted</p></blockquote><p>my reply</p>",
+		},
 	}
 
 	for _, tt := range tests {
@@ -92,6 +107,16 @@ func TestComposeRoundTrip(t *testing.T) {
 			name: "prose with code block",
 			in:   "see:\n```\nx = 1\n```",
 			want: "see:\n\n```\nx = 1\n```",
+		},
+		{
+			name: "quote round trips",
+			in:   "> quoted text",
+			want: "> quoted text",
+		},
+		{
+			name: "multi-line quote round trips",
+			in:   "> line one\n> line two",
+			want: "> line one\n> line two",
 		},
 	}
 

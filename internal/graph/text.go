@@ -9,6 +9,10 @@ import (
 var (
 	tagRe        = regexp.MustCompile(`(?s)<[^>]*>`)
 	multiSpaceRe = regexp.MustCompile(`[ \t]{2,}`)
+	// blockquoteRe matches a <blockquote>…</blockquote> element (Teams stores
+	// quoted replies, and our own quote-replies, this way). Captured group 1 is
+	// the inner HTML, which quoteToLines converts to "> "-prefixed lines.
+	blockquoteRe = regexp.MustCompile(`(?is)<blockquote\b[^>]*>(.*?)</blockquote\s*>`)
 )
 
 // PlainText converts a message body to a readable plain-text string. Graph chat
@@ -39,6 +43,18 @@ func (b MessageBody) PlainText() string {
 		// generic tag strip below, which would otherwise discard them.
 		content = replaceEmojiTags(content)
 
+		// Convert quoted replies (<blockquote>) to "> "-prefixed lines so the
+		// quote structure survives the tag strip and the UI can style it. Done
+		// before the block-element newline replacements below so the quote's own
+		// paragraph breaks are handled by quoteToLines.
+		content = blockquoteRe.ReplaceAllStringFunc(content, func(m string) string {
+			sub := blockquoteRe.FindStringSubmatch(m)
+			if sub == nil {
+				return m
+			}
+			return "\n" + quoteToLines(sub[1]) + "\n"
+		})
+
 		// End each block element with a single newline. A single <p>...</p> is
 		// therefore one line; an explicit empty paragraph (<p>&nbsp;</p>)
 		// becomes a whitespace-only line that normalizeWhitespace turns into a
@@ -58,6 +74,33 @@ func (b MessageBody) PlainText() string {
 
 	content = normalizeWhitespace(content)
 	return restoreCodeBlocks(content, codeBlocks)
+}
+
+// quoteToLines converts the inner HTML of a <blockquote> into plain-text lines,
+// each prefixed with "> " so the renderer can style the quote (and so it stays
+// readable in any client). Block boundaries (<br>, </p>, </div>) become line
+// breaks; remaining tags are stripped and entities decoded. Blank lines inside
+// the quote are dropped to keep it compact.
+func quoteToLines(inner string) string {
+	s := strings.NewReplacer(
+		"<br>", "\n", "<br/>", "\n", "<br />", "\n",
+		"<BR>", "\n", "<BR/>", "\n", "<BR />", "\n",
+		"</p>", "\n", "</P>", "\n", "</div>", "\n", "</DIV>", "\n",
+	).Replace(inner)
+	s = tagRe.ReplaceAllString(s, "")
+	s = html.UnescapeString(s)
+	s = strings.ReplaceAll(s, "\u00a0", " ")
+
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		line = multiSpaceRe.ReplaceAllString(line, " ")
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		out = append(out, "> "+line)
+	}
+	return strings.Join(out, "\n")
 }
 
 // normalizeWhitespace tidies the converted text: trims each line, replaces

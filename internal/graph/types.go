@@ -300,6 +300,26 @@ func (m *Message) ReactionSummary() []string {
 	return out
 }
 
+// UserReacted reports whether the user with the given ID has already reacted to
+// this message with the given emoji glyph. It compares against each reaction's
+// rendered Emoji() so a stored keyword type (e.g. "like") and its Unicode glyph
+// ("👍") are treated as the same reaction. Used to decide whether re-reacting
+// should toggle the reaction off. An empty userID never matches.
+func (m *Message) UserReacted(userID, emoji string) bool {
+	if userID == "" {
+		return false
+	}
+	for _, r := range m.Reactions {
+		if r.User == nil || r.User.User == nil || r.User.User.ID != userID {
+			continue
+		}
+		if r.Emoji() == emoji {
+			return true
+		}
+	}
+	return false
+}
+
 // DisplayName produces a human-friendly label for a chat. For 1:1 and group
 // chats without a topic it falls back to the member names (excluding self).
 func (c *Chat) DisplayName(selfID string) string {
