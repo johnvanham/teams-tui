@@ -242,10 +242,11 @@ func loadOlderMessagesCmd(ctx context.Context, c *graph.Client, chatID, nextLink
 	}
 }
 
-// sendMessageCmd posts a message to a chat.
-func sendMessageCmd(ctx context.Context, c *graph.Client, chatID, text string) tea.Cmd {
+// sendMessageCmd posts a message to a chat, attaching any @-mentions so Graph
+// notifies the mentioned participants.
+func sendMessageCmd(ctx context.Context, c *graph.Client, chatID, text string, mentions []graph.Mention) tea.Cmd {
 	return func() tea.Msg {
-		if _, err := c.SendMessage(ctx, chatID, text); err != nil {
+		if _, err := c.SendMessageWithMentions(ctx, chatID, text, mentions); err != nil {
 			return errMsg{err}
 		}
 		return sentMsg{chatID: chatID}

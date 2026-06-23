@@ -48,6 +48,10 @@ is about to start.
   shortcodes match with or without separators — `:nauseatedface:` (the Teams
   form) and `:nauseated_face:` both work. Press `ctrl+:` to open a browser of
   every emoji and filter it interactively.
+- **@-mentions:** in a group or meeting chat, type `@` to open a participant
+  picker and `tab`/`enter` to complete a name (`↑`/`↓` to choose, keep typing to
+  filter by first name or surname). The completed name is sent as a real Teams
+  mention, so the person is notified and the mention highlights for everyone.
 - **Presence:** see each participant's Teams status next to their name, and set
   your own status from a popup (`ctrl+s`). While running, the app maintains a
   presence session so your chosen status persists like a native client.
@@ -197,6 +201,7 @@ registration first if your tenant requires it.
 | `alt+enter`    | Insert a newline in the compose box      |
 | `:` + 2 chars  | Open the inline emoji picker while composing (`↑`/`↓` select, `tab`/`enter` insert, `esc` close) |
 | `ctrl+:`       | Open the full emoji browser while composing: lists every emoji and filters as you type (`↑`/`↓` select, `enter` insert at cursor, `esc` close). Falls back to `ctrl+t` on terminals without the Kitty keyboard protocol |
+| `@`            | In a group/meeting chat, open the participant picker to @-mention someone (`↑`/`↓` select, `tab`/`enter` complete, keep typing to filter, `esc` dismiss) |
 | `/`            | Filter the chat list / search contacts   |
 | `ctrl+o`       | Toggle the sidebar between Chats and Contacts (start a new chat) |
 | `ctrl+e`       | Edit a message: the selected message in the Messages pane if it's yours, otherwise your most recent message |

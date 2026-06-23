@@ -90,7 +90,7 @@ func (m *Model) layout() {
 	// Reserve one row for the participants/presence header above the messages,
 	// plus the inline emoji popup's rows when it is open (it sits between the
 	// messages and the compose box, stealing height from the viewport).
-	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight() - m.reactPickerHeight() - m.emojiBrowserHeight()
+	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight() - m.reactPickerHeight() - m.emojiBrowserHeight() - m.mentionPickerHeight()
 	if vpInnerH < 1 {
 		vpInnerH = 1
 	}
@@ -255,6 +255,9 @@ func (m Model) viewReady() string {
 	}
 	if m.emojiBrowser {
 		rightParts = append(rightParts, m.viewEmojiBrowser())
+	}
+	if m.mentionPicker {
+		rightParts = append(rightParts, m.viewMentionPicker())
 	}
 	rightParts = append(rightParts, compose)
 	right := lipgloss.JoinVertical(lipgloss.Left, rightParts...)
@@ -473,6 +476,37 @@ func (m Model) viewEmojiBrowser() string {
 	}
 	hint := styles.Hint.Render("type to filter · ↑↓ select · enter insert · esc cancel")
 	body := lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinVertical(lipgloss.Left, rows...), hint)
+	return styles.EmojiPicker.Render(body)
+}
+
+// mentionPickerHeight returns the rows the @-mention popup occupies when open
+// (one row per match + a hint row + the box border), or 0 when closed. layout()
+// subtracts this from the messages viewport like the other pickers.
+func (m Model) mentionPickerHeight() int {
+	if !m.mentionPicker || len(m.mentionMatches) == 0 {
+		return 0
+	}
+	return len(m.mentionMatches) + 1 + 2 // rows + hint + top/bottom border
+}
+
+// viewMentionPicker renders the @-mention autocomplete as a small bordered list
+// of participant names, the highlighted row reverse-styled, with a hint line.
+func (m Model) viewMentionPicker() string {
+	if len(m.mentionMatches) == 0 {
+		return ""
+	}
+	rows := make([]string, 0, len(m.mentionMatches))
+	for i, mem := range m.mentionMatches {
+		label := "@" + mem.DisplayName
+		if i == m.mentionSel {
+			rows = append(rows, styles.EmojiPickerSelected.Render(" "+label+" "))
+		} else {
+			rows = append(rows, styles.EmojiPickerItem.Render(" "+label+" "))
+		}
+	}
+	list := lipgloss.JoinVertical(lipgloss.Left, rows...)
+	hint := styles.Hint.Render("↑↓ select · tab/enter mention · esc close")
+	body := lipgloss.JoinVertical(lipgloss.Left, list, hint)
 	return styles.EmojiPicker.Render(body)
 }
 

@@ -135,6 +135,15 @@ type Model struct {
 	browserMatches []graph.EmojiShortcode // current matches for browserQuery
 	browserSel     int                    // highlighted match index
 
+	// Mention autocomplete (triggered by "@" in the composer of a group chat):
+	// tab/enter completes a participant's name, inserting "@DisplayName" and
+	// recording the member so a Graph @-mention is attached on send.
+	mentionPicker  bool                       // popup currently shown
+	mentionMatches []graph.ConversationMember // members matching the typed query
+	mentionSel     int                        // highlighted match index
+	mentionQuery   string                     // text typed after the "@"
+	mentions       []graph.Mention            // mentions chosen for the pending message
+
 	// Transient notices.
 	errText     string
 	banner      string

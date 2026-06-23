@@ -387,11 +387,25 @@ func (c *Client) ListMessagesSince(ctx context.Context, chatID string, since tim
 // native client — Graph's "text" content type otherwise collapses newlines and
 // shows fences literally.
 func (c *Client) SendMessage(ctx context.Context, chatID, text string) (*Message, error) {
+	return c.SendMessageWithMentions(ctx, chatID, text, nil)
+}
+
+// SendMessageWithMentions posts a message that @-mentions one or more chat
+// participants. The body is built by ComposeHTMLWithMentions, which rewrites
+// "@DisplayName" runs into <at id="N">…</at> markup, and the matching "mentions"
+// array is attached to the payload so Graph notifies the mentioned users (and
+// the native client renders the highlight). With no mentions it behaves exactly
+// like SendMessage.
+func (c *Client) SendMessageWithMentions(ctx context.Context, chatID, text string, mentions []Mention) (*Message, error) {
+	content, payloads := ComposeHTMLWithMentions(text, mentions)
 	payload := map[string]any{
 		"body": map[string]string{
 			"contentType": "html",
-			"content":     ComposeHTML(text),
+			"content":     content,
 		},
+	}
+	if len(payloads) > 0 {
+		payload["mentions"] = payloads
 	}
 	buf, err := json.Marshal(payload)
 	if err != nil {

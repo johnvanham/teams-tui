@@ -316,7 +316,7 @@ func (m Model) withinSidebar(x int) bool {
 // box. A click at or below this row lands on the compose box.
 func (m Model) composeTop() int {
 	return m.messagesContentTop() + m.viewport.Height() + 1 /*viewport bottom border*/ +
-		m.emojiPickerHeight() + m.reactPickerHeight() + m.emojiBrowserHeight()
+		m.emojiPickerHeight() + m.reactPickerHeight() + m.emojiBrowserHeight() + m.mentionPickerHeight()
 }
 
 // withinCompose reports whether a screen Y coordinate falls on the compose box
@@ -574,6 +574,29 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// The @-mention picker (only open while composing) likewise claims
+	// navigation and completion keys. Tab/enter complete the highlighted name;
+	// printable keys fall through to the composer to keep filtering.
+	if m.mentionPicker && m.focus == focusCompose {
+		switch {
+		case msg.String() == "esc":
+			m.closeMentionPicker()
+			m.layout()
+			return m, nil
+		case msg.String() == "up" || msg.String() == "ctrl+p":
+			m.mentionPickerMove(-1)
+			return m, nil
+		case msg.String() == "down" || msg.String() == "ctrl+n":
+			m.mentionPickerMove(1)
+			return m, nil
+		case key.Matches(msg, m.keys.Send), msg.String() == "tab":
+			if m.applyMentionSelection() {
+				m.layout()
+				return m, nil
+			}
+		}
+	}
+
 	switch {
 	case key.Matches(msg, m.keys.NextPane):
 		m.cycleFocus(1)
@@ -606,6 +629,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.compose, cmd = m.compose.Update(msg)
 			m.autoReplaceEmoticon()
 			m.refreshEmojiPicker()
+			m.refreshMentionPicker()
 			m.layout() // grow the box to fit the new content
 			return m, tea.Batch(focusCmd, cmd)
 		}
@@ -622,6 +646,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.clearPendingImage()
 			m.compose.Reset()
 			m.closeEmojiPicker()
+			m.closeMentionPicker()
+			m.clearMentions()
 			m.layout()
 			return m, nil
 		}
@@ -658,6 +684,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.replaceColonEmoticonBeforeCursor()
 		}
 		m.refreshEmojiPicker()
+		m.refreshMentionPicker()
 		// Recompute layout so the compose box grows/shrinks with its content.
 		m.layout()
 		return m, cmd
@@ -1513,6 +1540,10 @@ func (m Model) trySend() (tea.Model, tea.Cmd) {
 	// and image caption), since they all derive from this one string.
 	text := strings.TrimSpace(graph.ReplaceShortcodes(m.compose.Value()))
 	m.closeEmojiPicker()
+	m.closeMentionPicker()
+	// Snapshot the chosen @-mentions for this send; only those whose
+	// "@DisplayName" text still appears get marked up (handled in graph).
+	mentions := m.mentions
 	if m.currentChat == "" {
 		return m, nil
 	}
@@ -1526,6 +1557,7 @@ func (m Model) trySend() (tea.Model, tea.Cmd) {
 		ct := m.pendingImageCT
 		m.clearPendingImage()
 		m.compose.Reset()
+		m.clearMentions()
 		m.editingMsgID = ""
 		m.layout()
 		return m, sendImageCmd(m.ctx, m.client, chatID, img, ct, text)
@@ -1535,17 +1567,19 @@ func (m Model) trySend() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	// If we're editing an existing message, PATCH it instead of posting a new
-	// one, then leave edit mode.
+	// one, then leave edit mode. (Edits don't carry @-mentions.)
 	if m.editingMsgID != "" {
 		msgID := m.editingMsgID
 		m.editingMsgID = ""
 		m.compose.Reset()
+		m.clearMentions()
 		m.layout()
 		return m, editMessageCmd(m.ctx, m.client, chatID, msgID, text)
 	}
 	m.compose.Reset()
+	m.clearMentions()
 	m.layout() // shrink the compose box back immediately
-	return m, sendMessageCmd(m.ctx, m.client, chatID, text)
+	return m, sendMessageCmd(m.ctx, m.client, chatID, text, mentions)
 }
 
 // startEdit loads one of the signed-in user's messages into the compose box for
