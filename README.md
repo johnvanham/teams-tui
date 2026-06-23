@@ -39,10 +39,15 @@ is about to start.
   client.
 - **Emoji:** incoming Teams emoji render as Unicode glyphs. When composing,
   classic emoticons (`:-)`, `<3`, `:D`) are auto-replaced with the emoji as you
-  type, like the desktop client. Typing `:` followed by at least two characters
-  opens an inline shortcode picker (`:thumbsup:`) above the compose box (`↑`/`↓`
-  to select, `tab`/`enter` to insert, `esc` to dismiss) without interrupting
-  your typing.
+  type, like the desktop client. Colon-style emoticons (`:)`, `:p`, `:D`)
+  convert only once you type a space after them, so they don't get in the way of
+  shortcodes that share the same start (e.g. `:party`). Typing `:` followed by
+  at least two characters opens an inline shortcode picker (`:thumbsup:`) above
+  the compose box (`↑`/`↓` to select, `tab`/`enter` to insert, `esc` to dismiss)
+  without interrupting your typing. The full standard emoji set is supported, and
+  shortcodes match with or without separators — `:nauseatedface:` (the Teams
+  form) and `:nauseated_face:` both work. Press `ctrl+:` to open a browser of
+  every emoji and filter it interactively.
 - **Presence:** see each participant's Teams status next to their name, and set
   your own status from a popup (`ctrl+s`). While running, the app maintains a
   presence session so your chosen status persists like a native client.

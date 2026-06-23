@@ -69,7 +69,7 @@ func TestRefreshEmojiPickerTrigger(t *testing.T) {
 	}
 
 	// Unknown token: popup closed.
-	m = newComposeModel("hi :zz")
+	m = newComposeModel("hi :qx")
 	m.refreshEmojiPicker()
 	if m.emojiPicker {
 		t.Errorf("picker should be closed for non-matching token")
@@ -77,17 +77,21 @@ func TestRefreshEmojiPickerTrigger(t *testing.T) {
 }
 
 func TestAutoReplaceEmoticon(t *testing.T) {
+	// autoReplaceEmoticon fires on every keystroke and only handles non-colon
+	// emoticons; colon-led ones (":-)", ":p") defer to a word boundary so they
+	// don't pre-empt :shortcode: tokens (see TestColonEmoticonBoundary).
 	tests := []struct {
 		name  string
 		value string
 		want  string
 	}{
-		{"smiley", "hello :-)", "hello 🙂"},
-		{"heart", "love <3", "love ❤️"},
-		{"emoticon at start", ":-)", "🙂"},
+		{"heart converts immediately", "love <3", "love ❤️"},
+		{"shrug converts immediately", `\o/`, "🙌"},
+		{"colon emoticon NOT replaced inline", "hello :-)", "hello :-)"},
+		{"colon emoticon at start NOT replaced inline", ":-)", ":-)"},
 		{"no emoticon untouched", "hello :", "hello :"},
 		{"incomplete emoticon untouched", "hello :-", "hello :-"},
-		{"text after emoticon not replaced", ":-) ok", ":-) ok"},
+		{"text after emoticon not replaced", "<3 ok", "<3 ok"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -98,6 +102,35 @@ func TestAutoReplaceEmoticon(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestColonEmoticonBoundary(t *testing.T) {
+	// A colon emoticon converts only once a space finalizes it.
+	t.Run("space finalizes colon emoticon", func(t *testing.T) {
+		m := newComposeModel(":-) ") // user typed ":-)" then a space
+		m.replaceColonEmoticonBeforeCursor()
+		if got := m.compose.Value(); got != "🙂 " {
+			t.Errorf("value = %q, want %q", got, "🙂 ")
+		}
+	})
+	t.Run("colon shortcode prefix is not eaten", func(t *testing.T) {
+		// ":party" must survive: it shares the ":p" prefix with an emoticon but
+		// is not itself one, so the boundary replacement leaves it intact.
+		m := newComposeModel(":party ")
+		m.replaceColonEmoticonBeforeCursor()
+		if got := m.compose.Value(); got != ":party " {
+			t.Errorf("value = %q, want %q", got, ":party ")
+		}
+	})
+	t.Run("typing p after colon does not convert", func(t *testing.T) {
+		// Mid-word: ":p" with no trailing boundary stays put so ":party" can be
+		// finished.
+		m := newComposeModel("hi :p")
+		m.autoReplaceEmoticon() // simulate keystroke handling
+		if got := m.compose.Value(); got != "hi :p" {
+			t.Errorf("value = %q, want %q", got, "hi :p")
+		}
+	})
 }
 
 func TestApplyEmojiSelection(t *testing.T) {

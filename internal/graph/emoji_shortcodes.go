@@ -19,10 +19,11 @@ type EmojiShortcode struct {
 	Emoji string // Unicode character, e.g. "👍"
 }
 
-// shortcodeEmoji maps :name: tokens to Unicode emoji. Names follow the common
-// GitHub/Slack/Teams convention so muscle memory carries over. Aliases point at
-// the same glyph (e.g. "+1" and "thumbsup").
-var shortcodeEmoji = map[string]string{
+// curatedShortcodes maps a small set of convenient :name: tokens to Unicode
+// emoji. These are hand-picked aliases and Teams-flavoured names (e.g. "party",
+// "+1") that sit on top of the full generated gemojiTable. Where a name here
+// also exists in gemoji, this entry wins, so the readable/curated glyph is kept.
+var curatedShortcodes = map[string]string{
 	"thumbsup":         "👍",
 	"+1":               "👍",
 	"thumbsdown":       "👎",
@@ -177,6 +178,83 @@ var shortcodeEmoji = map[string]string{
 	"shrug":            "🤷",
 }
 
+// shortcodeEntry is a display name paired with its glyph, used to surface a
+// readable :name: in autocomplete/browser results while lookups go through the
+// normalized index.
+type shortcodeEntry struct {
+	Name  string // display name, e.g. "nauseated_face" or "thumbsup"
+	Emoji string
+}
+
+// shortcodeEmoji is the lookup index: a normalized shortcode name (lowercased
+// with '_' and '-' separators stripped) → glyph. Normalization lets the same
+// emoji resolve whether the user types the standard ":nauseated_face:" or the
+// Teams ":nauseatedface:" form. Built once by buildShortcodeIndex.
+var shortcodeEmoji = buildShortcodeIndex()
+
+// shortcodeNames is the de-duplicated set of display names (one per glyph,
+// preferring a readable alias) backing AllShortcodes and prefix matching. Built
+// alongside shortcodeEmoji.
+var shortcodeNames = buildShortcodeNames()
+
+// normalizeShortcode folds a shortcode name to its lookup key: lowercase with
+// '_' and '-' removed. So "Nauseated_Face", "nauseated-face" and "nauseatedface"
+// all map to the same key, matching how Teams writes shortcodes without
+// separators while still accepting the canonical underscore form.
+func normalizeShortcode(name string) string {
+	var b strings.Builder
+	b.Grow(len(name))
+	for _, r := range strings.ToLower(name) {
+		if r == '_' || r == '-' {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// buildShortcodeIndex assembles the normalized lookup map from the full gemoji
+// table plus the curated aliases. Curated entries are applied last so they win
+// on collisions (keeping the hand-picked glyph/name).
+func buildShortcodeIndex() map[string]string {
+	idx := make(map[string]string, len(gemojiTable)*2+len(curatedShortcodes))
+	for _, e := range gemojiTable {
+		for _, alias := range e.Aliases {
+			idx[normalizeShortcode(alias)] = e.Glyph
+		}
+	}
+	for name, glyph := range curatedShortcodes {
+		idx[normalizeShortcode(name)] = glyph
+	}
+	return idx
+}
+
+// buildShortcodeNames produces one readable display name per glyph for the
+// browser/autocomplete. It walks gemoji (first alias = canonical name), then
+// lets a curated name override when it is "nicer" (preferredShortcodeName), so
+// e.g. 👍 shows as "thumbsup" rather than gemoji's "+1".
+func buildShortcodeNames() []shortcodeEntry {
+	best := make(map[string]string) // glyph -> chosen display name
+	consider := func(name, glyph string) {
+		cur, ok := best[glyph]
+		if !ok || preferredShortcodeName(name, cur) {
+			best[glyph] = name
+		}
+	}
+	for _, e := range gemojiTable {
+		consider(e.Aliases[0], e.Glyph)
+	}
+	for name, glyph := range curatedShortcodes {
+		consider(name, glyph)
+	}
+	out := make([]shortcodeEntry, 0, len(best))
+	for glyph, name := range best {
+		out = append(out, shortcodeEntry{Name: name, Emoji: glyph})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
 // emoticonEmoji maps classic ASCII text emoticons to Unicode emoji. These are
 // matched and replaced automatically at send time (e.g. ":-)" -> "🙂"), like
 // the desktop client's auto-replace. Longer keys are tried before shorter ones
@@ -257,7 +335,7 @@ func buildEmoticonReplacer() *strings.Replacer {
 func ReplaceShortcodes(s string) string {
 	// :name: tokens first, only substituting known names.
 	s = shortcodeRe.ReplaceAllStringFunc(s, func(tok string) string {
-		name := strings.ToLower(tok[1 : len(tok)-1])
+		name := normalizeShortcode(tok[1 : len(tok)-1])
 		if glyph, ok := shortcodeEmoji[name]; ok {
 			return glyph
 		}
@@ -272,24 +350,27 @@ func ReplaceShortcodes(s string) string {
 // and shorter names first, then alphabetically, and capped at limit (limit <= 0
 // means no cap). The leading ':' should be stripped by the caller.
 func MatchShortcodePrefix(prefix string, limit int) []EmojiShortcode {
-	prefix = strings.ToLower(strings.TrimSpace(prefix))
-	if prefix == "" {
+	norm := normalizeShortcode(strings.TrimSpace(prefix))
+	if norm == "" {
 		return nil
 	}
 	var out []EmojiShortcode
-	for name, glyph := range shortcodeEmoji {
-		if strings.HasPrefix(name, prefix) {
-			out = append(out, EmojiShortcode{Name: name, Emoji: glyph})
+	for _, e := range shortcodeNames {
+		// Compare on the normalized name so ":nauseated" and ":nauseatedface"
+		// both match the "nauseated_face" entry.
+		if strings.HasPrefix(normalizeShortcode(e.Name), norm) {
+			out = append(out, EmojiShortcode{Name: e.Name, Emoji: e.Emoji})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
-		// Exact match wins, then shorter names, then alphabetical.
-		ei, ej := out[i].Name == prefix, out[j].Name == prefix
+		// Exact (normalized) match wins, then shorter names, then alphabetical.
+		ni, nj := normalizeShortcode(out[i].Name), normalizeShortcode(out[j].Name)
+		ei, ej := ni == norm, nj == norm
 		if ei != ej {
 			return ei
 		}
-		if len(out[i].Name) != len(out[j].Name) {
-			return len(out[i].Name) < len(out[j].Name)
+		if len(ni) != len(nj) {
+			return len(ni) < len(nj)
 		}
 		return out[i].Name < out[j].Name
 	})
@@ -306,19 +387,10 @@ func MatchShortcodePrefix(prefix string, limit int) []EmojiShortcode {
 // Results are sorted alphabetically by name. It backs the full emoji browser,
 // which lists every emoji and lets the user filter interactively.
 func AllShortcodes() []EmojiShortcode {
-	// Pick one canonical name per glyph.
-	best := make(map[string]string, len(shortcodeEmoji)) // glyph -> name
-	for name, glyph := range shortcodeEmoji {
-		cur, ok := best[glyph]
-		if !ok || preferredShortcodeName(name, cur) {
-			best[glyph] = name
-		}
+	out := make([]EmojiShortcode, len(shortcodeNames))
+	for i, e := range shortcodeNames {
+		out[i] = EmojiShortcode{Name: e.Name, Emoji: e.Emoji}
 	}
-	out := make([]EmojiShortcode, 0, len(best))
-	for glyph, name := range best {
-		out = append(out, EmojiShortcode{Name: name, Emoji: glyph})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
@@ -355,11 +427,44 @@ func isAlphaName(name string) bool {
 // cursor after each keystroke and, on a match, replaces the trailing emoticon
 // with the glyph.
 //
+// Emoticons that begin with ':' (":)", ":p", ":D", …) are intentionally NOT
+// matched here: they collide with the start of :shortcode: tokens, so replacing
+// ":p" the instant it is typed would make ":party" impossible. Those convert
+// only at a word boundary via MatchEmoticonBeforeBoundary. Non-colon emoticons
+// ("<3", "8-)", "\\o/", ">:(") are safe to convert immediately.
+//
 // To avoid mangling words and URLs (e.g. "http://"), a match only counts when
 // the character immediately before the emoticon is whitespace or the start of
 // the text. The longest emoticon wins (emoticonKeys is longest-first).
 func MatchEmoticonSuffix(text string) (glyph string, matchLen int, ok bool) {
 	for _, k := range emoticonKeys {
+		if strings.HasPrefix(k, ":") {
+			continue // colon-led emoticons defer to MatchEmoticonBeforeBoundary
+		}
+		if !strings.HasSuffix(text, k) {
+			continue
+		}
+		before := text[:len(text)-len(k)]
+		if before == "" || endsWithSpace(before) {
+			return emoticonEmoji[k], len(k), true
+		}
+	}
+	return "", 0, false
+}
+
+// MatchEmoticonBeforeBoundary reports whether the text immediately preceding the
+// cursor ends in a colon-led emoticon (":)", ":p", ":-D", …). It is called when
+// the user types a word boundary (space or newline), at which point the
+// preceding token is final and safe to convert — this is how ":p" becomes 😛
+// without preventing ":party" from being typed first. The returned matchLen is
+// the byte length of the emoticon (not including the boundary the caller just
+// inserted). A match requires the emoticon to be preceded by whitespace or the
+// start of text, mirroring MatchEmoticonSuffix.
+func MatchEmoticonBeforeBoundary(text string) (glyph string, matchLen int, ok bool) {
+	for _, k := range emoticonKeys {
+		if !strings.HasPrefix(k, ":") {
+			continue // non-colon emoticons already convert as you type
+		}
 		if !strings.HasSuffix(text, k) {
 			continue
 		}

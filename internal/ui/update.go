@@ -651,6 +651,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// re-evaluate the :shortcode: autocomplete suggestions against the new
 		// text.
 		m.autoReplaceEmoticon()
+		// A typed space finalizes the preceding token: convert a colon-led
+		// emoticon (":p" -> 😛) now that it can't be the start of a longer
+		// :shortcode: like ":party".
+		if msg.Text == " " {
+			m.replaceColonEmoticonBeforeCursor()
+		}
 		m.refreshEmojiPicker()
 		// Recompute layout so the compose box grows/shrinks with its content.
 		m.layout()

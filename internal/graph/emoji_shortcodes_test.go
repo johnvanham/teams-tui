@@ -65,6 +65,47 @@ func TestMatchShortcodePrefix(t *testing.T) {
 }
 
 func TestMatchEmoticonSuffix(t *testing.T) {
+	// MatchEmoticonSuffix only converts non-colon emoticons as you type; colon
+	// emoticons (":-)", ":\\") are deliberately skipped (they defer to
+	// MatchEmoticonBeforeBoundary so they don't pre-empt :shortcode: tokens).
+	tests := []struct {
+		name      string
+		in        string
+		wantGlyph string
+		wantLen   int
+		wantOK    bool
+	}{
+		{"heart", "love <3", "❤️", 2, true},
+		{"shrug", "ok \\o/", "🙌", 3, true},
+		{"broken heart", "ugh </3", "💔", 3, true},
+		{"colon emoticon skipped at end", "hello :-)", "", 0, false},
+		{"colon emoticon skipped at start", ":-)", "", 0, false},
+		{"colon confused skipped", "hmm :-\\", "", 0, false},
+		{"no boundary before (inside word)", "a<3", "", 0, false},
+		{"not an emoticon", "just text", "", 0, false},
+		{"emoticon not at end", "<3 more", "", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			glyph, n, ok := MatchEmoticonSuffix(tt.in)
+			if ok != tt.wantOK {
+				t.Fatalf("ok = %v, want %v (glyph=%q len=%d)", ok, tt.wantOK, glyph, n)
+			}
+			if ok {
+				if glyph != tt.wantGlyph {
+					t.Errorf("glyph = %q, want %q", glyph, tt.wantGlyph)
+				}
+				if n != tt.wantLen {
+					t.Errorf("matchLen = %d, want %d", n, tt.wantLen)
+				}
+			}
+		})
+	}
+}
+
+func TestMatchEmoticonBeforeBoundary(t *testing.T) {
+	// MatchEmoticonBeforeBoundary matches only colon-led emoticons immediately
+	// before a word boundary; the boundary character itself is not part of `in`.
 	tests := []struct {
 		name      string
 		in        string
@@ -74,18 +115,18 @@ func TestMatchEmoticonSuffix(t *testing.T) {
 	}{
 		{"smiley at end", "hello :-)", "🙂", 3, true},
 		{"smiley at start", ":-)", "🙂", 3, true},
-		{"heart", "love <3", "❤️", 2, true},
-		{"longest wins", "hi :-)", "🙂", 3, true},
-		{"no boundary before (inside word)", "http://", "", 0, false},
-		{"not an emoticon", "just text", "", 0, false},
-		{"emoticon not at end", ":-) more", "", 0, false},
-		{"shrug", "ok \\o/", "🙌", 3, true},
+		{"short smiley", "hi :)", "🙂", 2, true},
+		{"tongue", "haha :p", "😛", 2, true},
 		{"confused dash", "hmm :-\\", "😕", 3, true},
 		{"confused short", "well :\\", "😕", 2, true},
+		{"non-colon emoticon skipped", "love <3", "", 0, false},
+		{"inside word", "a:)", "", 0, false},
+		{"not an emoticon", "just text", "", 0, false},
+		{"shortcode prefix is not an emoticon", "hey :party", "", 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			glyph, n, ok := MatchEmoticonSuffix(tt.in)
+			glyph, n, ok := MatchEmoticonBeforeBoundary(tt.in)
 			if ok != tt.wantOK {
 				t.Fatalf("ok = %v, want %v (glyph=%q len=%d)", ok, tt.wantOK, glyph, n)
 			}

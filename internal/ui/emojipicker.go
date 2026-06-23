@@ -174,8 +174,67 @@ func (m *Model) autoReplaceEmoticon() {
 	if !ok {
 		return
 	}
-	// matchLen is a byte length into `before`; convert the matched emoticon to a
-	// rune count so we can splice on the rune-indexed line.
+	m.spliceEmoticon(before, col, runes, glyph, matchLen)
+}
+
+// replaceColonEmoticonBeforeCursor converts a just-completed colon-led emoticon
+// (":)", ":p", ":-D", …) to its glyph when the user types a word boundary. The
+// cursor is expected to sit immediately after the boundary character (a space or
+// newline the textarea has already inserted); this inspects the text before that
+// boundary and, if it ends in a colon-emoticon, swaps it for the glyph. This is
+// what lets ":p" become 😛 only once finished, so ":party" can be typed first.
+func (m *Model) replaceColonEmoticonBeforeCursor() {
+	line := m.currentComposeLine()
+	col := m.compose.Column()
+	runes := []rune(line)
+	if col > len(runes) {
+		col = len(runes)
+	}
+	if col == 0 {
+		return
+	}
+	// The boundary is the rune just before the cursor; examine what precedes it.
+	boundary := runes[col-1]
+	if boundary != ' ' && boundary != '\t' {
+		return // only spaces/tabs land here; newlines are handled by the caller
+	}
+	before := string(runes[:col-1])
+
+	glyph, matchLen, ok := graph.MatchEmoticonBeforeBoundary(before)
+	if !ok {
+		return
+	}
+	// Splice the emoticon (which ends at col-1, just before the boundary) but
+	// keep the boundary character the user typed.
+	emoticon := before[len(before)-matchLen:]
+	emoticonRunes := len([]rune(emoticon))
+	startCol := (col - 1) - emoticonRunes
+	if startCol < 0 {
+		return
+	}
+
+	lines := strings.Split(m.compose.Value(), "\n")
+	row := m.compose.Line()
+	if row < 0 || row >= len(lines) {
+		return
+	}
+	newLine := string(runes[:startCol]) + glyph + string(runes[col-1:])
+	lines[row] = newLine
+	m.compose.SetValue(strings.Join(lines, "\n"))
+
+	m.compose.MoveToBegin()
+	for i := 0; i < row; i++ {
+		m.compose.CursorDown()
+	}
+	// Cursor goes after the glyph + the preserved boundary character.
+	m.compose.SetCursorColumn(startCol + len([]rune(glyph)) + 1)
+}
+
+// spliceEmoticon replaces the matched emoticon ending at col on the current line
+// with glyph and repositions the cursor just after it. before/runes/col describe
+// the line up to the cursor; matchLen is the emoticon's byte length within
+// before.
+func (m *Model) spliceEmoticon(before string, col int, runes []rune, glyph string, matchLen int) {
 	emoticon := before[len(before)-matchLen:]
 	emoticonRunes := len([]rune(emoticon))
 	startCol := col - emoticonRunes
