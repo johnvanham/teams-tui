@@ -299,6 +299,55 @@ func MatchShortcodePrefix(prefix string, limit int) []EmojiShortcode {
 	return out
 }
 
+// AllShortcodes returns the full emoji table as a sorted list, deduplicated by
+// glyph so each emoji appears once. When several shortcodes alias the same glyph
+// (e.g. "+1" and "thumbsup" → 👍), the most readable name wins: a longer,
+// purely alphabetic name is preferred over a short or symbol-bearing alias.
+// Results are sorted alphabetically by name. It backs the full emoji browser,
+// which lists every emoji and lets the user filter interactively.
+func AllShortcodes() []EmojiShortcode {
+	// Pick one canonical name per glyph.
+	best := make(map[string]string, len(shortcodeEmoji)) // glyph -> name
+	for name, glyph := range shortcodeEmoji {
+		cur, ok := best[glyph]
+		if !ok || preferredShortcodeName(name, cur) {
+			best[glyph] = name
+		}
+	}
+	out := make([]EmojiShortcode, 0, len(best))
+	for glyph, name := range best {
+		out = append(out, EmojiShortcode{Name: name, Emoji: glyph})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// preferredShortcodeName reports whether candidate is a "nicer" canonical name
+// than current for the same glyph: alphabetic names beat ones containing digits
+// or symbols (so "thumbsup" beats "+1"); among equally-alphabetic names the
+// longer one wins (more descriptive), with alphabetical order as a tiebreak.
+func preferredShortcodeName(candidate, current string) bool {
+	ca, cu := isAlphaName(candidate), isAlphaName(current)
+	if ca != cu {
+		return ca
+	}
+	if len(candidate) != len(current) {
+		return len(candidate) > len(current)
+	}
+	return candidate < current
+}
+
+// isAlphaName reports whether name consists solely of a–z letters (no digits,
+// '+', '-' or '_'), marking it as a clean, readable shortcode.
+func isAlphaName(name string) bool {
+	for _, r := range name {
+		if r < 'a' || r > 'z' {
+			return false
+		}
+	}
+	return name != ""
+}
+
 // MatchEmoticonSuffix reports whether text ends with a recognized ASCII
 // emoticon (e.g. ":-)" or "<3") and, if so, returns the emoticon's Unicode
 // glyph and the byte length of the matched emoticon. It is used for live,

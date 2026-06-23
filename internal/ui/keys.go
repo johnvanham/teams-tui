@@ -21,6 +21,7 @@ type keyMap struct {
 	Down     key.Binding
 	React    key.Binding
 	Quote    key.Binding
+	Emoji    key.Binding
 }
 
 func defaultKeyMap() keyMap {
@@ -81,6 +82,13 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("q"),
 			key.WithHelp("q", "quote (msgs)"),
 		),
+		// ctrl+: is the requested binding; it only reaches the app on terminals
+		// that support the Kitty keyboard protocol (Kitty, Ghostty, WezTerm, …).
+		// ctrl+t is a portable fallback that works everywhere.
+		Emoji: key.NewBinding(
+			key.WithKeys("ctrl+:", "ctrl+t"),
+			key.WithHelp("ctrl+:", "emoji picker"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("ctrl+g", "f1", "?"),
 			key.WithHelp("ctrl+g", "help"),
@@ -102,7 +110,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.NextPane, k.PrevPane},
 		{k.Send, k.Newline, k.Edit, k.Image, k.Paste},
-		{k.React, k.Quote, k.Contacts, k.Status, k.Refresh},
+		{k.React, k.Quote, k.Emoji, k.Contacts, k.Status, k.Refresh},
 		{k.Help, k.Quit},
 	}
 }

@@ -191,6 +191,7 @@ registration first if your tenant requires it.
 | `q`            | Quote-reply to the selected message (Messages): prefills the composer with the quoted text |
 | `alt+enter`    | Insert a newline in the compose box      |
 | `:` + 2 chars  | Open the inline emoji picker while composing (`↑`/`↓` select, `tab`/`enter` insert, `esc` close) |
+| `ctrl+:`       | Open the full emoji browser while composing: lists every emoji and filters as you type (`↑`/`↓` select, `enter` insert at cursor, `esc` close). Falls back to `ctrl+t` on terminals without the Kitty keyboard protocol |
 | `/`            | Filter the chat list / search contacts   |
 | `ctrl+o`       | Toggle the sidebar between Chats and Contacts (start a new chat) |
 | `ctrl+e`       | Edit a message: the selected message in the Messages pane if it's yours, otherwise your most recent message |

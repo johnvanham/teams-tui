@@ -90,7 +90,7 @@ func (m *Model) layout() {
 	// Reserve one row for the participants/presence header above the messages,
 	// plus the inline emoji popup's rows when it is open (it sits between the
 	// messages and the compose box, stealing height from the viewport).
-	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight() - m.reactPickerHeight()
+	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight() - m.reactPickerHeight() - m.emojiBrowserHeight()
 	if vpInnerH < 1 {
 		vpInnerH = 1
 	}
@@ -252,6 +252,9 @@ func (m Model) viewReady() string {
 	}
 	if m.reactPicker {
 		rightParts = append(rightParts, m.viewReactPicker())
+	}
+	if m.emojiBrowser {
+		rightParts = append(rightParts, m.viewEmojiBrowser())
 	}
 	rightParts = append(rightParts, compose)
 	right := lipgloss.JoinVertical(lipgloss.Left, rightParts...)
@@ -419,6 +422,56 @@ func (m Model) viewReactPicker() string {
 		}
 	}
 	hint := styles.Hint.Render("type to search · ↑↓ select · enter react · esc cancel")
+	body := lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinVertical(lipgloss.Left, rows...), hint)
+	return styles.EmojiPicker.Render(body)
+}
+
+// emojiBrowserHeight returns the rows the full emoji browser occupies when open
+// (a query row + up to emojiBrowserMax emoji rows + a nav hint + the box
+// border), or 0 when closed. layout() subtracts this from the messages viewport
+// like the other pickers so the vertical budget stays balanced.
+func (m Model) emojiBrowserHeight() int {
+	if !m.emojiBrowser {
+		return 0
+	}
+	rows, _ := m.browserWindow()
+	n := len(rows)
+	if n == 0 {
+		n = 1 // still show the "no matches" row
+	}
+	extra := 0
+	if len(m.browserMatches) > len(rows) {
+		extra = 1 // the "+N more" indicator row
+	}
+	return n + extra + 2 + 2 // rows + indicator + query line + nav hint + top/bottom border
+}
+
+// viewEmojiBrowser renders the full emoji browser: a search line, a scrolling
+// window of glyph + :shortcode: rows (the highlighted row reverse-styled, with a
+// "+N more" tail when the list overflows the window), and a navigation hint.
+func (m Model) viewEmojiBrowser() string {
+	win, sel := m.browserWindow()
+	total := len(m.browserMatches)
+
+	rows := make([]string, 0, len(win)+2)
+	query := "Emoji: " + m.browserQuery
+	rows = append(rows, styles.Hint.Render(query+"▌"))
+	if total == 0 {
+		rows = append(rows, styles.EmojiPickerItem.Render(" no matching emoji "))
+	}
+	for i, e := range win {
+		label := e.Emoji + "  :" + e.Name + ":"
+		if i == sel {
+			rows = append(rows, styles.EmojiPickerSelected.Render(" "+label+" "))
+		} else {
+			rows = append(rows, styles.EmojiPickerItem.Render(" "+label+" "))
+		}
+	}
+	if total > len(win) {
+		more := fmt.Sprintf(" %d of %d — keep typing to narrow ", m.browserSel+1, total)
+		rows = append(rows, styles.Hint.Render(more))
+	}
+	hint := styles.Hint.Render("type to filter · ↑↓ select · enter insert · esc cancel")
 	body := lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinVertical(lipgloss.Left, rows...), hint)
 	return styles.EmojiPicker.Render(body)
 }

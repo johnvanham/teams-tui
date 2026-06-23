@@ -128,6 +128,13 @@ type Model struct {
 	reactSel     int                    // highlighted match index
 	reactMsgID   string                 // message being reacted to
 
+	// Emoji browser (opened with "ctrl+:" while composing): lists every emoji
+	// and filters as you type; the chosen glyph is inserted at the cursor.
+	emojiBrowser   bool                   // browser overlay shown
+	browserQuery   string                 // typed search text (shortcode prefix)
+	browserMatches []graph.EmojiShortcode // current matches for browserQuery
+	browserSel     int                    // highlighted match index
+
 	// Transient notices.
 	errText     string
 	banner      string

@@ -316,7 +316,7 @@ func (m Model) withinSidebar(x int) bool {
 // box. A click at or below this row lands on the compose box.
 func (m Model) composeTop() int {
 	return m.messagesContentTop() + m.viewport.Height() + 1 /*viewport bottom border*/ +
-		m.emojiPickerHeight() + m.reactPickerHeight()
+		m.emojiPickerHeight() + m.reactPickerHeight() + m.emojiBrowserHeight()
 }
 
 // withinCompose reports whether a screen Y coordinate falls on the compose box
@@ -471,6 +471,19 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Reaction picker captures all input while open.
 	if m.reactPicker {
 		return m.handleReactPickerKey(msg)
+	}
+
+	// Emoji browser captures all input while open.
+	if m.emojiBrowser {
+		return m.handleEmojiBrowserKey(msg)
+	}
+
+	// Open the full emoji browser (ctrl+:) while composing. It lists every
+	// emoji and filters as you type; the chosen glyph is inserted at the cursor.
+	if key.Matches(msg, m.keys.Emoji) && m.focus == focusCompose {
+		m.openEmojiBrowser()
+		m.layout()
+		return m, nil
 	}
 
 	// Open the status picker.
@@ -1615,6 +1628,45 @@ func (m Model) handleReactPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.reactQuery += msg.Text
 		m.reactSel = 0
 		m.refreshReactMatches()
+		m.layout()
+	}
+	return m, nil
+}
+
+// handleEmojiBrowserKey handles input while the full emoji browser is open:
+// typing filters the list, up/down move the highlight (the list scrolls to keep
+// it visible), enter inserts the highlighted glyph at the compose cursor, and
+// esc cancels.
+func (m Model) handleEmojiBrowserKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.closeEmojiBrowser()
+		m.layout()
+		return m, nil
+	case "up", "ctrl+p":
+		m.browserMove(-1)
+		return m, nil
+	case "down", "ctrl+n":
+		m.browserMove(1)
+		return m, nil
+	case "backspace":
+		if r := []rune(m.browserQuery); len(r) > 0 {
+			m.browserQuery = string(r[:len(r)-1])
+			m.browserSel = 0
+			m.refreshBrowserMatches()
+			m.layout()
+		}
+		return m, nil
+	case "enter", "tab":
+		m.applyBrowserSelection()
+		m.layout()
+		return m, nil
+	}
+	// Printable characters extend the search query.
+	if msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0 {
+		m.browserQuery += msg.Text
+		m.browserSel = 0
+		m.refreshBrowserMatches()
 		m.layout()
 	}
 	return m, nil
