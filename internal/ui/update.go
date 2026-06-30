@@ -44,10 +44,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.FocusMsg:
 		m.focused = true
+		// Restore the compose cursor (and its blink) if the composer was the
+		// active pane before the terminal lost focus.
+		if m.focus == focusCompose {
+			return m, m.compose.Focus()
+		}
 		return m, nil
 
 	case tea.BlurMsg:
 		m.focused = false
+		// Hide the compose cursor while the terminal/tmux pane is unfocused so
+		// it doesn't keep blinking in an inactive pane.
+		m.compose.Blur()
 		return m, nil
 	}
 
