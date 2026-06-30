@@ -184,6 +184,11 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 	ta.MinHeight = composeMinLines
 	ta.MaxHeight = composeMinLines // real cap set in layout() from screen size
 	ta.SetHeight(composeMinLines)
+	// Add ctrl+left/right as word-jump bindings (alongside the textarea's
+	// default alt+left/right), matching the word-by-word cursor movement most
+	// editors and terminals offer. home/end already work via LineStart/LineEnd.
+	ta.KeyMap.WordForward.SetKeys(append(ta.KeyMap.WordForward.Keys(), "ctrl+right")...)
+	ta.KeyMap.WordBackward.SetKeys(append(ta.KeyMap.WordBackward.Keys(), "ctrl+left")...)
 	ta.Blur()
 
 	vp := viewport.New()
