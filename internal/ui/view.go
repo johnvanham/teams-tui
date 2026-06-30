@@ -32,6 +32,12 @@ func (m *Model) layout() {
 	if !m.ready {
 		return
 	}
+	// Remember whether the messages viewport was pinned to the bottom before we
+	// resize it. Growing the compose box shrinks the viewport, which would
+	// otherwise leave the newest message scrolled off-screen. We re-anchor to
+	// the bottom at the end only when the user hadn't scrolled up themselves.
+	stickToBottom := m.viewport.AtBottom()
+
 	helpHeight := 1
 	if m.help.ShowAll {
 		helpHeight = 3
@@ -101,6 +107,12 @@ func (m *Model) layout() {
 
 	// Re-render the conversation to fit the new width.
 	m.renderConversation()
+
+	// Keep the latest message visible after the viewport's height changed
+	// (e.g. the compose box grew while typing), unless the user had scrolled up.
+	if stickToBottom {
+		m.viewport.GotoBottom()
+	}
 }
 
 // View renders the whole application as a tea.View (v2 returns a struct).
