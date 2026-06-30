@@ -1591,10 +1591,17 @@ func (m Model) startEdit() (tea.Model, tea.Cmd) {
 	if m.currentChat == "" || m.me == nil {
 		return m, nil
 	}
-	// Prefer the currently selected message if it's the user's own (so clicking
-	// a message and pressing edit edits that one). Deleted messages can't be
-	// edited.
-	msg, ok := m.editableSelection()
+	// Prefer the actively selected message only while the messages pane is
+	// focused (i.e. there's a visible selection) and it's the user's own — so
+	// navigating to a message and pressing edit edits that one. Otherwise
+	// (nothing actively selected) fall back to the user's most recent message.
+	// A leftover selection index from a previous visit to the pane must not
+	// hijack the edit. Deleted messages can't be edited.
+	var msg graph.Message
+	var ok bool
+	if m.focus == focusMessages {
+		msg, ok = m.editableSelection()
+	}
 	if !ok {
 		msg, ok = m.latestOwnMessage(m.currentChat)
 	}
