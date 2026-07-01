@@ -25,7 +25,7 @@ const (
 	sidebarHeaderRows      = 1 // "Chats" header drawn inside the sidebar chrome
 	participantsHeaderRows = 1 // presence header above the conversation
 	composeMinLines        = 1 // minimum visible rows in the compose box
-	scrollbarWidth         = 1 // gutter column for the messages scroll indicator
+	scrollbarWidth         = 2 // scroll-indicator gutter: one spacer + one bar column
 )
 
 // tallestHelpGroup returns the number of rows in the longest full-help group.
@@ -938,7 +938,7 @@ func (m *Model) scrollbar(height int) string {
 	}
 	total := m.viewport.TotalLineCount()
 	// Nothing to scroll: the whole conversation fits, so draw no bar (the
-	// caller leaves the reserved column blank).
+	// caller leaves the reserved columns blank).
 	if total <= height {
 		return strings.Repeat("\n", height-1)
 	}
@@ -970,6 +970,8 @@ func (m *Model) scrollbar(height int) string {
 
 	var b strings.Builder
 	for i := 0; i < height; i++ {
+		// Leading space keeps the bar off the message text.
+		b.WriteByte(' ')
 		if i >= pos && i < pos+thumb {
 			b.WriteString(styles.ScrollbarThumb.Render("█"))
 		} else {
