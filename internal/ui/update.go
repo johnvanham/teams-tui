@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,6 +39,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseClickMsg:
 		return m.handleMouseClick(msg)
+
+	case tea.MouseMotionMsg:
+		return m.handleMouseMotion(msg)
+
+	case tea.MouseReleaseMsg:
+		return m.handleMouseRelease(msg)
 
 	case tea.MouseWheelMsg:
 		return m.handleMouseWheel(msg)
@@ -130,6 +137,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Immediately refresh the affected chat for snappy feedback.
 		return m, loadMessagesCmd(m.ctx, m.client, msg.chatID)
 
+	case textCopiedMsg:
+		if msg.err != nil {
+			if errors.Is(msg.err, clipboard.ErrNoClipboardTool) {
+				m.errText = "No clipboard tool found (install wl-clipboard or xclip)."
+			} else {
+				m.errText = "Couldn't copy to clipboard: " + msg.err.Error()
+			}
+			return m, nil
+		}
+		m.banner = fmt.Sprintf("Copied %d characters to the clipboard.", msg.n)
+		m.bannerUntil = time.Now().Add(3 * time.Second)
+		return m, nil
+
 	case imagePastedMsg:
 		if msg.err != nil {
 			if errors.Is(msg.err, clipboard.ErrNoImage) {
@@ -218,6 +238,9 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
 	m.ready = true
+	// A resize re-wraps the conversation, invalidating the selection's line/col
+	// coordinates, so drop any active selection.
+	m.clearSelection()
 	m.layout()
 	return m, nil
 }
@@ -349,6 +372,7 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 			// A click on the compose box focuses it so the user can type.
 			if m.withinCompose(msg.Y) {
 				m.focus = focusCompose
+				m.clearSelection()     // drop any mouse text selection
 				m.renderConversation() // drop the messages-pane selection highlight
 				return m, m.compose.Focus()
 			}
@@ -357,11 +381,20 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 				return m.viewImageAt(idx)
 			}
 			// Otherwise it's a click in the messages pane: focus it and select
-			// the clicked message so react/quote act on it.
+			// the clicked message so react/quote act on it. Also begin a
+			// potential text selection at the click point; a subsequent drag
+			// (MouseMotionMsg) grows it, while a plain click clears it on
+			// release so nothing is left highlighted.
 			m.focus = focusMessages
 			m.compose.Blur()
 			if idx, ok := m.msgAtY(msg.Y); ok {
 				m.selectedMsg = idx
+			}
+			m.clearSelection()
+			if pt, ok := m.selectionAt(msg.X, msg.Y); ok && m.selectionWithinMessages(msg.X) {
+				m.selecting = true
+				m.selAnchorLn, m.selAnchorCol = pt.line, pt.col
+				m.selCurLn, m.selCurCol = pt.line, pt.col
 			}
 			m.renderConversation()
 		}
@@ -373,6 +406,10 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if m.sidebarMode == sidebarContacts {
 		m.focus = focusChats
 		m.compose.Blur()
+		if m.selecting {
+			m.clearSelection()
+			m.renderConversation()
+		}
 		return m, nil
 	}
 	idx := m.chatIndexAtY(msg.Y)
@@ -387,6 +424,38 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	openCmd := m.openChat(c)
 	m.focus = focusCompose
 	return m, tea.Batch(openCmd, m.compose.Focus())
+}
+
+// handleMouseMotion extends an in-progress text selection as the user drags the
+// mouse with the button held. It only acts while a selection was started on a
+// left-button press in the messages pane (m.selecting); other motion is
+// ignored. The cursor endpoint follows the pointer and the conversation is
+// re-rendered so the highlight tracks the drag.
+func (m Model) handleMouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
+	if m.phase != phaseReady || !m.selecting {
+		return m, nil
+	}
+	pt, ok := m.selectionAt(msg.X, msg.Y)
+	if !ok {
+		return m, nil
+	}
+	m.selCurLn, m.selCurCol = pt.line, pt.col
+	m.renderConversation()
+	return m, nil
+}
+
+// handleMouseRelease finalizes a text selection. A drag that grew past its
+// anchor is kept (so y/q can act on it); a plain click that never moved clears
+// the selection state so no stale highlight lingers.
+func (m Model) handleMouseRelease(msg tea.MouseReleaseMsg) (tea.Model, tea.Cmd) {
+	if m.phase != phaseReady || !m.selecting {
+		return m, nil
+	}
+	if !m.hasSelection() {
+		m.clearSelection()
+		m.renderConversation()
+	}
+	return m, nil
 }
 
 // handleMouseWheel scrolls whichever pane the pointer is over: the chat list
@@ -792,6 +861,21 @@ func (m Model) handleMessagesPaneKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.reactToSelected()
 	case "q":
 		return m.quoteSelected()
+	case "y", "c":
+		// Copy a mouse-highlighted text selection to the OS clipboard. Only
+		// meaningful when something is selected; otherwise fall through so the
+		// key isn't swallowed.
+		if m.hasSelection() {
+			return m.copySelection()
+		}
+	case "esc":
+		// Clear an active selection (and its highlight) without leaving the
+		// pane.
+		if m.selecting {
+			m.clearSelection()
+			m.renderConversation()
+			return m, nil
+		}
 	}
 	// Anything else (pgup/pgdn, etc.): plain viewport scroll, loading older
 	// history when scrolled near the top.
@@ -1036,6 +1120,9 @@ func (m Model) handleMessages(msg messagesMsg) (tea.Model, tea.Cmd) {
 		// considered read. Advance the local read horizon past the newest
 		// message so the chat won't flash unread once they switch away.
 		m.advanceRead(msg.chatID, msg.messages)
+		// New content re-lays out the conversation, invalidating any text
+		// selection's line coordinates, so drop it.
+		m.clearSelection()
 		atBottom := m.viewport.AtBottom()
 		m.renderConversation()
 		if atBottom {
@@ -1155,6 +1242,9 @@ func (m Model) handleOlderMessages(msg olderMessagesMsg) (tea.Model, tea.Cmd) {
 	m.messages[msg.chatID] = mergeMessages(before, msg.messages)
 
 	if msg.chatID == m.currentChat {
+		// Prepending older history shifts every content line, invalidating any
+		// text selection, so drop it.
+		m.clearSelection()
 		// Preserve the viewing position: remember how far from the bottom we
 		// were, re-render, then restore so the view doesn't jump.
 		linesFromTop := m.viewport.TotalLineCount() - m.viewport.YOffset()
@@ -1362,6 +1452,11 @@ func (m *Model) cycleFocus(dir int) {
 // focusCmd applies focus/blur side effects (textarea cursor) and returns any
 // resulting command.
 func (m *Model) focusCmd() tea.Cmd {
+	// Leaving the messages pane drops any mouse text selection so its highlight
+	// doesn't linger over an inactive pane.
+	if m.focus != focusMessages {
+		m.clearSelection()
+	}
 	// Re-render so the message-selection highlight shows only while the messages
 	// pane is focused (and is removed when focus moves elsewhere). Keep the
 	// selection visible when entering the pane.
@@ -1549,6 +1644,9 @@ func (m Model) viewImageAt(idx int) (tea.Model, tea.Cmd) {
 // messages plus participant presence.
 func (m *Model) openChat(chatID string) tea.Cmd {
 	m.currentChat = chatID
+	// Switching chats invalidates any text selection (it referenced the old
+	// conversation's lines).
+	m.clearSelection()
 	// Opening a chat marks it read: advance the local read horizon past its
 	// latest message so the unread highlight clears immediately, before the
 	// server viewpoint catches up on the next poll. Persist the read state to
@@ -1885,10 +1983,18 @@ func (m Model) quoteSelected() (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	// Prefer a mouse-highlighted sub-range: quote exactly what's selected.
+	// Otherwise fall back to quoting the whole message body.
 	text := sel.Body.PlainText()
 	if sel.DeletedAt != nil {
 		text = "(message deleted)"
 	}
+	if snippet := strings.TrimRight(m.selectionText(), " \t"); snippet != "" {
+		text = snippet
+	}
+	// Drop the selection now that it's been consumed so the highlight clears on
+	// the next render.
+	m.clearSelection()
 	var b strings.Builder
 	b.WriteString("> ")
 	b.WriteString(sel.SenderName())
@@ -1907,6 +2013,20 @@ func (m Model) quoteSelected() (tea.Model, tea.Cmd) {
 	m.focus = focusCompose
 	m.layout()
 	return m, m.compose.Focus()
+}
+
+// copySelection copies the mouse-highlighted text to the OS clipboard and clears
+// the highlight. The write itself runs in a tea.Cmd (it may shell out to a
+// clipboard helper); the resulting textCopiedMsg surfaces a confirmation or
+// error notice.
+func (m Model) copySelection() (tea.Model, tea.Cmd) {
+	text := m.selectionText()
+	if text == "" {
+		return m, nil
+	}
+	m.clearSelection()
+	m.renderConversation()
+	return m, copyTextCmd(text)
 }
 
 // clearPendingImage discards any clipboard image staged for the next send.

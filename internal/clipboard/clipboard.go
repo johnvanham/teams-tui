@@ -28,6 +28,53 @@ import (
 // ErrNoImage indicates the clipboard does not currently contain an image.
 var ErrNoImage = errors.New("clipboard: no image found")
 
+// ErrNoClipboardTool indicates no supported clipboard helper was found on the
+// host, so text could not be copied.
+var ErrNoClipboardTool = errors.New("clipboard: no clipboard tool available")
+
+// WriteText copies s to the host platform's clipboard so the user can paste it
+// elsewhere. Like ReadImage it shells out to the platform's clipboard utility
+// (there is no portable way for a terminal program to set the clipboard on
+// every OS). ErrNoClipboardTool is returned when no helper is installed.
+func WriteText(s string) error {
+	return writePlatformText(s)
+}
+
+// writePlatformText dispatches to the right clipboard writer for the OS.
+func writePlatformText(s string) error {
+	switch runtime.GOOS {
+	case "linux":
+		return writeLinuxText(s)
+	case "darwin":
+		return runPipe(exec.Command("pbcopy"), s)
+	case "windows":
+		// clip.exe reads stdin and copies it to the Windows clipboard.
+		return runPipe(exec.Command("clip"), s)
+	default:
+		return fmt.Errorf("clipboard: unsupported platform %q", runtime.GOOS)
+	}
+}
+
+// writeLinuxText prefers Wayland's wl-copy, falling back to X11's xclip. If
+// neither tool is installed, ErrNoClipboardTool is returned so the UI can show
+// a friendly notice.
+func writeLinuxText(s string) error {
+	if path, err := exec.LookPath("wl-copy"); err == nil {
+		return runPipe(exec.Command(path), s)
+	}
+	if path, err := exec.LookPath("xclip"); err == nil {
+		return runPipe(exec.Command(path, "-selection", "clipboard"), s)
+	}
+	return ErrNoClipboardTool
+}
+
+// runPipe runs cmd, feeding s to its stdin. Used by the clipboard writers,
+// which all read the text to copy from stdin.
+func runPipe(cmd *exec.Cmd, s string) error {
+	cmd.Stdin = bytes.NewBufferString(s)
+	return cmd.Run()
+}
+
 // ReadImage returns the image currently on the clipboard and its MIME type.
 // It tries the platform-appropriate helper(s); a missing helper or an empty
 // clipboard yields ErrNoImage so callers can present a clear message.

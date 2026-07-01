@@ -214,9 +214,11 @@ registration first if your tenant requires it.
 | `tab` / `shift+tab` | Move focus between Chats / Messages / Compose |
 | `↑`/`↓` `j`/`k`| Navigate the focused pane; in Messages, move the message selection |
 | click          | Select the clicked message (Messages); click the compose box to focus it |
+| click + drag   | Highlight text in the Messages pane (drag over the text you want to select) |
+| `y` / `c`      | Copy the highlighted text selection to the system clipboard (Messages) |
 | `enter`        | Open selected chat (Chats) / send message (Compose) / start chat (Contacts) |
 | `r`            | React to the selected message (Messages): opens a searchable emoji picker; reacting with an emoji you already used removes it |
-| `q`            | Quote-reply to the selected message (Messages): prefills the composer with the quoted text |
+| `q`            | Quote-reply (Messages): if text is highlighted, quotes just that selection; otherwise quotes the whole selected message. Prefills the composer with the quoted text |
 | `alt+enter`    | Insert a newline in the compose box      |
 | `:` + 2 chars  | Open the inline emoji picker while composing (`↑`/`↓` select, `tab`/`enter` insert, `esc` close) |
 | `ctrl+j`       | Open the full emoji browser while composing (mnemonic: emoJi): lists every emoji and filters as you type (`↑`/`↓` select, `enter` insert at cursor, `esc` close) |
@@ -281,6 +283,13 @@ and `ui/highlight.go` syntax-highlights the rendered block using a
   to open the newest one, or click a placeholder to open that specific image, in
   your OS default image viewer/browser (inline Graph hosted content is
   downloaded with your token first). Other attachment types are not yet rendered.
+- You can highlight message text with a click-and-drag in the Messages pane,
+  then `y`/`c` to copy it to the system clipboard or `q` to quote just that
+  selection into a reply. Copying shells out to a platform clipboard helper, so
+  the relevant tool must be installed: `wl-copy` (Wayland) or `xclip` (X11) on
+  Linux, `pbcopy` on macOS, and `clip` on Windows. (The app captures the mouse
+  for its own selection; to fall back to your terminal's native selection, hold
+  the modifier your terminal uses to bypass app mouse reporting — often `shift`.)
 - You can paste an image from the clipboard with `ctrl+v` to send it inline.
   This shells out to a platform clipboard helper, so the relevant tool must be
   installed: `wl-paste` (Wayland) or `xclip` (X11) on Linux, `osascript` on

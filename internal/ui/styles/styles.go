@@ -172,6 +172,11 @@ var (
 	// pane (a small caret before its header) so react/quote targets are clear.
 	MessageSelected = lipgloss.NewStyle().Foreground(Orange).Bold(true)
 
+	// SelectionHighlight marks a mouse-dragged text selection in the messages
+	// viewport (inverse-ish: purple background, white text) so the copied/quoted
+	// range is visible.
+	SelectionHighlight = lipgloss.NewStyle().Background(Purple).Foreground(White)
+
 	// Quote styles the text of a quoted reply (a ">"-prefixed run in a message
 	// body). QuoteBar colours the left bar that marks the quoted block.
 	Quote = lipgloss.NewStyle().Foreground(LightGrey).Italic(true)

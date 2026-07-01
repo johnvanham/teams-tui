@@ -298,6 +298,24 @@ func pasteImageCmd() tea.Cmd {
 	}
 }
 
+// textCopiedMsg reports the outcome of copying selected text to the OS
+// clipboard so the UI can show a confirmation or error notice.
+type textCopiedMsg struct {
+	n   int   // number of runes copied (for the confirmation notice)
+	err error // non-nil when the clipboard write failed
+}
+
+// copyTextCmd writes s to the OS clipboard. Like pasteImageCmd it shells out to
+// a platform helper (wl-copy/xclip/pbcopy/clip), so it runs off the UI goroutine.
+func copyTextCmd(s string) tea.Cmd {
+	return func() tea.Msg {
+		if err := clipboard.WriteText(s); err != nil {
+			return textCopiedMsg{err: err}
+		}
+		return textCopiedMsg{n: len([]rune(s))}
+	}
+}
+
 // sendImageCmd posts an inline image (with an optional text caption) to a chat.
 func sendImageCmd(ctx context.Context, c *graph.Client, chatID string, img []byte, contentType, caption string) tea.Cmd {
 	return func() tea.Msg {

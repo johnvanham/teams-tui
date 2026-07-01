@@ -831,6 +831,12 @@ func (m *Model) renderConversation() {
 	// index (msgLineStart).
 	m.imageLines = make(map[int]int)
 	m.msgLineStart = make([]int, len(m.convMsgs))
+	// wrapCont[i] marks content line i as a soft word-wrap continuation of the
+	// previous line, so selection text extraction can rejoin wrapped prose with
+	// a space instead of a hard newline. Everything except reflowed prose (the
+	// header, image/reaction rows, blank separators, code/quote blocks) is a
+	// hard break (false).
+	var wrapCont []bool
 	line := 0
 	for i, msg := range m.convMsgs {
 		text := msg.Body.PlainText()
@@ -853,12 +859,14 @@ func (m *Model) renderConversation() {
 		m.msgLineStart[i] = line
 		b.WriteString(header)
 		b.WriteString("\n")
-		line++ // header row
+		wrapCont = append(wrapCont, false) // header is a hard break
+		line++                             // header row
 		if text != "" {
-			rendered := renderBody(text, width, m.codeStyle)
-			b.WriteString(rendered)
+			bodyLines, bodyCont := renderBodyLines(text, width, m.codeStyle)
+			b.WriteString(strings.Join(bodyLines, "\n"))
 			b.WriteString("\n")
-			line += strings.Count(rendered, "\n") + 1
+			wrapCont = append(wrapCont, bodyCont...)
+			line += len(bodyLines)
 		}
 		// Render a numbered placeholder for each image; the number matches the
 		// index used by the "view image" action (1-based for humans). Record
@@ -874,17 +882,33 @@ func (m *Model) renderConversation() {
 			b.WriteString(styles.ImagePlaceholder.Render(placeholder))
 			b.WriteString("\n")
 			m.imageLines[line] = idx
+			wrapCont = append(wrapCont, false)
 			line++ // placeholder row
 		}
 		if reactions := msg.ReactionSummary(); len(reactions) > 0 {
 			b.WriteString(styles.Reaction.Render(strings.Join(reactions, "  ")))
 			b.WriteString("\n")
+			wrapCont = append(wrapCont, false)
 			line++ // reaction row
 		}
 		b.WriteString("\n")
+		wrapCont = append(wrapCont, false)
 		line++ // blank separator row
 	}
-	m.viewport.SetContent(strings.TrimRight(b.String(), "\n"))
+	content := strings.TrimRight(b.String(), "\n")
+	// Remember the rendered content split into lines so a mouse selection can be
+	// highlighted and its text extracted (see selection.go). Kept in sync with
+	// the viewport content set below. wrapCont is truncated to match, since
+	// TrimRight may drop the trailing blank separator line(s).
+	m.selContent = strings.Split(content, "\n")
+	if len(wrapCont) > len(m.selContent) {
+		wrapCont = wrapCont[:len(m.selContent)]
+	}
+	m.selWrapCont = wrapCont
+	if m.selecting {
+		content = m.applySelectionHighlight(content)
+	}
+	m.viewport.SetContent(content)
 }
 
 // clampSelection keeps selectedMsg within the bounds of the currently visible
@@ -995,10 +1019,31 @@ const codeFence = "```"
 // panel, clamped to width. The result is a single string ready for the
 // viewport.
 func renderBody(text string, width int, codeStyle *chroma.Style) string {
-	lines := strings.Split(text, "\n")
-	var out []string
-	for i := 0; i < len(lines); i++ {
-		line := lines[i]
+	rendered, _ := renderBodyLines(text, width, codeStyle)
+	return strings.Join(rendered, "\n")
+}
+
+// renderBodyLines is renderBody's underlying implementation: it returns the
+// rendered body split into content lines plus a parallel "continuation" flag
+// per line. A true flag marks a line that is a soft word-wrap continuation of
+// the previous content line (not a real newline in the source), so text
+// extraction (selection copy/quote) can rejoin wrapped prose with a space
+// instead of a hard newline. Code-block and quote lines are always treated as
+// hard breaks since they aren't reflowable prose.
+func renderBodyLines(text string, width int, codeStyle *chroma.Style) (lines []string, cont []bool) {
+	src := strings.Split(text, "\n")
+	// add appends a rendered block (possibly multi-line) whose first line is a
+	// hard break and whose remaining lines are marked continuations only when
+	// soft is true (prose wrapping); code/quote blocks pass soft=false.
+	add := func(block string, soft bool) {
+		blockLines := strings.Split(block, "\n")
+		for j, bl := range blockLines {
+			lines = append(lines, bl)
+			cont = append(cont, soft && j > 0)
+		}
+	}
+	for i := 0; i < len(src); i++ {
+		line := src[i]
 		// An opening fence (```​ or ```lang) starts a code block that runs until
 		// the matching closing fence (or end of text if Teams sent a malformed
 		// block).
@@ -1006,29 +1051,30 @@ func renderBody(text string, width int, codeStyle *chroma.Style) string {
 			lang := strings.TrimSpace(strings.TrimPrefix(line, codeFence))
 			var code []string
 			i++
-			for ; i < len(lines); i++ {
-				if strings.HasPrefix(lines[i], codeFence) {
+			for ; i < len(src); i++ {
+				if strings.HasPrefix(src[i], codeFence) {
 					break
 				}
-				code = append(code, lines[i])
+				code = append(code, src[i])
 			}
-			out = append(out, renderCodeBlock(code, lang, width, codeStyle))
+			add(renderCodeBlock(code, lang, width, codeStyle), false)
 			continue
 		}
 		// A run of ">"-prefixed lines is a quoted reply: collect the whole run
 		// and render it as one styled block with a left bar.
 		if isQuoteLine(line) {
 			var quote []string
-			for ; i < len(lines) && isQuoteLine(lines[i]); i++ {
-				quote = append(quote, stripQuotePrefix(lines[i]))
+			for ; i < len(src) && isQuoteLine(src[i]); i++ {
+				quote = append(quote, stripQuotePrefix(src[i]))
 			}
 			i-- // the loop's i++ will advance past the last quote line
-			out = append(out, renderQuote(quote, width))
+			add(renderQuote(quote, width), false)
 			continue
 		}
-		out = append(out, wrapLineInline(line, width))
+		// Prose: word-wrapped, so lines after the first are soft continuations.
+		add(wrapLineInline(line, width), true)
 	}
-	return strings.Join(out, "\n")
+	return lines, cont
 }
 
 // isQuoteLine reports whether a rendered body line is a Markdown-style quote

@@ -105,6 +105,20 @@ type Model struct {
 	convMsgs        []graph.Message           // open chat's messages in display (oldest-first) order
 	msgLineStart    []int                     // convMsgs[i] -> viewport content line of its header
 	selectedMsg     int                       // index into convMsgs of the highlighted message (-1 = none)
+
+	// Mouse text selection in the messages viewport. selContent holds the
+	// rendered conversation split into content lines (with ANSI styling) so a
+	// selection can be highlighted and its plain text extracted. A drag records
+	// an anchor where the button went down and a cursor that follows the mouse;
+	// selecting reports true once the two differ. Coordinates are (line, col):
+	// line is a 0-based viewport content line, col a 0-based display column.
+	selContent   []string // rendered conversation, one entry per content line
+	selWrapCont  []bool   // selContent[i] is a soft word-wrap continuation of i-1
+	selecting    bool     // a selection is currently in progress or held
+	selAnchorLn  int      // content line where the drag started
+	selAnchorCol int      // display column where the drag started
+	selCurLn     int      // content line under the mouse now
+	selCurCol    int      // display column under the mouse now
 	openingImage    bool                      // an image download/open is in flight
 	editingMsgID    string                    // message ID being edited ("" if composing new)
 	pendingImage    []byte                    // image pasted from the clipboard, awaiting send

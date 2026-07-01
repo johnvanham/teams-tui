@@ -21,6 +21,7 @@ type keyMap struct {
 	Down     key.Binding
 	React    key.Binding
 	Quote    key.Binding
+	Copy     key.Binding
 	Emoji    key.Binding
 	Correct  key.Binding
 }
@@ -81,7 +82,14 @@ func defaultKeyMap() keyMap {
 		),
 		Quote: key.NewBinding(
 			key.WithKeys("q"),
-			key.WithHelp("q", "quote (msgs)"),
+			key.WithHelp("q", "quote selection/msg"),
+		),
+		// y/c copy a mouse-highlighted text selection in the messages pane to
+		// the OS clipboard. (Only active while text is selected; the keys
+		// otherwise fall through.)
+		Copy: key.NewBinding(
+			key.WithKeys("y"),
+			key.WithHelp("drag+y", "copy selection"),
 		),
 		// ctrl+j opens the emoji browser (mnemonic: emoJi). It works on every
 		// terminal, unlike ctrl+:, which only reaches the app under the Kitty
@@ -116,7 +124,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.NextPane, k.PrevPane},
 		{k.Send, k.Newline, k.Edit, k.Image, k.Paste},
-		{k.React, k.Quote, k.Emoji, k.Correct, k.Contacts, k.Status, k.Refresh},
+		{k.React, k.Quote, k.Copy, k.Emoji, k.Correct, k.Contacts, k.Status, k.Refresh},
 		{k.Help, k.Quit},
 	}
 }
