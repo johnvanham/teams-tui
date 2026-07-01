@@ -4,5 +4,7 @@
   "poll_interval_seconds": 10,
   "meeting_lookahead_minutes": 5,
   "disable_desktop_notify": false,
-  "code_block_style": "monokai"
+  "code_block_style": "monokai",
+  "disable_spell_check": false,
+  "spell_language": ""
 }

@@ -202,6 +202,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case errMsg:
 		return m.handleError(msg)
+
+	case spellDebounceMsg:
+		return m.handleSpellDebounce(msg)
+
+	case spellCheckedMsg:
+		return m.handleSpellChecked(msg)
 	}
 
 	// Spinner ticks and any other component messages.
@@ -656,6 +662,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.closeEmojiPicker()
 			m.closeMentionPicker()
 			m.clearMentions()
+			m.clearSpellCheck()
 			m.layout()
 			return m, nil
 		}
@@ -695,7 +702,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.refreshMentionPicker()
 		// Recompute layout so the compose box grows/shrinks with its content.
 		m.layout()
-		return m, cmd
+		return m, tea.Batch(cmd, m.scheduleSpellCheck())
 	}
 
 	// Chats pane: arrows preview a chat; Enter opens it and jumps to compose.
@@ -1343,6 +1350,51 @@ func (m *Model) focusCmd() tea.Cmd {
 	return nil
 }
 
+// scheduleSpellCheck arms a debounced spell check of the compose box after an
+// edit. It bumps the generation so any earlier pending debounce/result is
+// ignored, then waits spellDebounce before actually running the check (see
+// spellDebounceMsg). Returns nil when spell checking is unavailable so callers
+// can batch it unconditionally.
+func (m *Model) scheduleSpellCheck() tea.Cmd {
+	if !m.speller.Available() {
+		return nil
+	}
+	m.spellGen++
+	return spellDebounceCmd(spellDebounce, m.spellGen)
+}
+
+// handleSpellDebounce runs the actual (subprocess) spell check when the debounce
+// timer fires, but only if no newer edit has superseded this generation.
+func (m Model) handleSpellDebounce(msg spellDebounceMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.spellGen || !m.speller.Available() {
+		return m, nil
+	}
+	return m, spellCheckCmd(m.speller, m.compose.Value(), msg.gen)
+}
+
+// handleSpellChecked stores fresh misspellings for the strip, ignoring results
+// from a check that a newer edit has already made stale.
+func (m Model) handleSpellChecked(msg spellCheckedMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.spellGen {
+		return m, nil
+	}
+	changed := len(msg.words) != len(m.spellMisspell)
+	m.spellMisspell = msg.words
+	// The strip's presence changes the compose region height, so re-run layout
+	// when it appears or disappears.
+	if changed {
+		m.layout()
+	}
+	return m, nil
+}
+
+// clearSpellCheck drops any current misspellings (e.g. after send/clear) so the
+// strip disappears immediately rather than lingering until the next check.
+func (m *Model) clearSpellCheck() {
+	m.spellGen++ // invalidate any in-flight check
+	m.spellMisspell = nil
+}
+
 func (m Model) selectedChatID() string {
 	if it, ok := m.list.SelectedItem().(chatItem); ok {
 		return it.chat.ID
@@ -1566,6 +1618,7 @@ func (m Model) trySend() (tea.Model, tea.Cmd) {
 		m.clearPendingImage()
 		m.compose.Reset()
 		m.clearMentions()
+		m.clearSpellCheck()
 		m.editingMsgID = ""
 		m.layout()
 		return m, sendImageCmd(m.ctx, m.client, chatID, img, ct, text)
@@ -1581,11 +1634,13 @@ func (m Model) trySend() (tea.Model, tea.Cmd) {
 		m.editingMsgID = ""
 		m.compose.Reset()
 		m.clearMentions()
+		m.clearSpellCheck()
 		m.layout()
 		return m, editMessageCmd(m.ctx, m.client, chatID, msgID, text)
 	}
 	m.compose.Reset()
 	m.clearMentions()
+	m.clearSpellCheck()
 	m.layout() // shrink the compose box back immediately
 	return m, sendMessageCmd(m.ctx, m.client, chatID, text, mentions)
 }
@@ -1622,7 +1677,7 @@ func (m Model) startEdit() (tea.Model, tea.Cmd) {
 	m.focus = focusCompose
 	m.compose.SetValue(msg.Body.PlainText())
 	m.layout()
-	return m, m.compose.Focus()
+	return m, tea.Batch(m.compose.Focus(), m.scheduleSpellCheck())
 }
 
 // editableSelection returns the selected message when it is the signed-in user's

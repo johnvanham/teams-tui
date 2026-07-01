@@ -44,6 +44,7 @@ into a single `Update`. Never block in `Update` or `View`; do I/O in a `tea.Cmd`
 | auth | `internal/auth/` | device-code OAuth, refresh, OS keyring |
 | graph | `internal/graph/` | Microsoft Graph REST client + models |
 | notify | `internal/notify/` | desktop notifications |
+| spell | `internal/spell/` | compose-box spell check (enchant-2/hunspell subprocess) |
 | ui | `internal/ui/` | Bubble Tea model/update/view |
 | styles | `internal/ui/styles/` | Lip Gloss styling |
 
@@ -81,6 +82,17 @@ The code-block fence convention (the literal ```` ``` ```` plus optional
 language) is shared between `graph/code.go` (parsing), `graph/compose.go`
 (sending), and `ui/view.go` (rendering) — keep the three in sync when changing
 it.
+
+### Spell check (`internal/spell/`)
+- `spell.go` — thin subprocess wrapper. `New(lang)` resolves a system helper
+  (`enchant-2`, then `hunspell`) and returns a disabled `Checker` when none is
+  installed (feature stays dormant, never errors). `CheckText` pipes the compose
+  text to the helper's ispell `-a` mode and parses the reply for misspellings +
+  suggestions. In the UI it's driven off `Update`: a compose edit bumps
+  `Model.spellGen` and arms `spellDebounceCmd`; when the debounce fires (and the
+  generation still matches) `spellCheckCmd` runs the check in a `tea.Cmd`, and
+  `viewSpellStrip` renders the result beneath the compose box. `spellStripHeight`
+  feeds `layout()` so the strip steals a row from the messages viewport.
 
 ## Conventions
 

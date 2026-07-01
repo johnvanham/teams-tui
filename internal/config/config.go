@@ -44,6 +44,15 @@ type Config struct {
 	// blocks (e.g. "monokai", "dracula", "github-dark"). Defaults to
 	// DefaultCodeBlockStyle. An unknown name falls back to that default.
 	CodeBlockStyle string `json:"code_block_style,omitempty"`
+	// DisableSpellCheck turns off compose-box spell checking (the strip of
+	// misspelled words + suggestions shown under the compose box). Spell
+	// checking shells out to the system helper (enchant-2, falling back to
+	// hunspell) and is silently disabled anyway when neither is installed.
+	DisableSpellCheck bool `json:"disable_spell_check,omitempty"`
+	// SpellLanguage selects the dictionary for spell checking (e.g. "en_US",
+	// "en_GB"). Empty uses the system helper's default dictionary. Run
+	// `enchant-2 -list-dicts` to see what's installed.
+	SpellLanguage string `json:"spell_language,omitempty"`
 }
 
 // DefaultCodeBlockStyle is the chroma theme used to colour code blocks when the
@@ -98,6 +107,12 @@ func Load() (*Config, error) {
 	}
 	if v := os.Getenv("TEAMS_TUI_CODE_BLOCK_STYLE"); v != "" {
 		cfg.CodeBlockStyle = v
+	}
+	if os.Getenv("TEAMS_TUI_DISABLE_SPELL_CHECK") != "" {
+		cfg.DisableSpellCheck = true
+	}
+	if v := os.Getenv("TEAMS_TUI_SPELL_LANGUAGE"); v != "" {
+		cfg.SpellLanguage = v
 	}
 
 	cfg.applyDefaults()

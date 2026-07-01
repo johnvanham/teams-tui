@@ -11,6 +11,7 @@ import (
 	"github.com/jvh/teams-tui/internal/clipboard"
 	"github.com/jvh/teams-tui/internal/graph"
 	"github.com/jvh/teams-tui/internal/open"
+	"github.com/jvh/teams-tui/internal/spell"
 )
 
 // --- Messages flowing into Update ---
@@ -129,6 +130,18 @@ type sessionTickMsg time.Time
 // sessionRefreshedMsg signals a successful presence-session heartbeat.
 type sessionRefreshedMsg struct{}
 
+// spellDebounceMsg fires after the compose box has been idle briefly; gen ties
+// it to the keystroke that scheduled it so stale ticks (superseded by newer
+// typing) are ignored.
+type spellDebounceMsg struct{ gen int }
+
+// spellCheckedMsg carries the misspelled words found in the compose text. gen
+// lets the model drop results from a check that a newer edit has superseded.
+type spellCheckedMsg struct {
+	gen   int
+	words []spell.Misspelling
+}
+
 const (
 	// wheelScrollLines is how many lines one mouse-wheel notch scrolls the
 	// conversation. Higher feels more responsive, especially on trackpads.
@@ -146,6 +159,9 @@ const (
 	// sessionInterval is the heartbeat period; shorter than sessionExpiry so
 	// the session never lapses.
 	sessionInterval = 4 * time.Minute
+	// spellDebounce is how long the compose box must be idle before a spell
+	// check runs, so rapid typing collapses into one subprocess invocation.
+	spellDebounce = 400 * time.Millisecond
 )
 
 // fastTickCmd schedules the next incremental open-chat poll.
@@ -464,4 +480,20 @@ func presenceTickCmd(d time.Duration) tea.Cmd {
 // sessionTickCmd schedules the next presence-session heartbeat.
 func sessionTickCmd(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(t time.Time) tea.Msg { return sessionTickMsg(t) })
+}
+
+// spellDebounceCmd waits a short idle period before a spell check runs, tagging
+// the resulting message with gen so a burst of keystrokes collapses into a
+// single check of the final text.
+func spellDebounceCmd(d time.Duration, gen int) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg { return spellDebounceMsg{gen: gen} })
+}
+
+// spellCheckCmd runs the (subprocess) spell check off the Update loop and
+// returns the misspellings tagged with gen. A nil/unavailable checker yields an
+// empty result, so the caller need not special-case it.
+func spellCheckCmd(c *spell.Checker, text string, gen int) tea.Cmd {
+	return func() tea.Msg {
+		return spellCheckedMsg{gen: gen, words: c.CheckText(text)}
+	}
 }

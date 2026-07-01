@@ -193,4 +193,15 @@ var (
 				Foreground(White).
 				Background(Purple).
 				Bold(true)
+
+	// SpellLabel prefixes the spell-check strip under the compose box (e.g.
+	// "spelling:").
+	SpellLabel = lipgloss.NewStyle().Foreground(Grey)
+
+	// SpellWord marks a misspelled word in the spell-check strip (red +
+	// underline, echoing how GUI editors flag misspellings).
+	SpellWord = lipgloss.NewStyle().Foreground(Red).Underline(true)
+
+	// SpellSuggestion styles a suggested correction shown after a misspelling.
+	SpellSuggestion = lipgloss.NewStyle().Foreground(LightGrey)
 )

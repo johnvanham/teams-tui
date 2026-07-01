@@ -52,6 +52,12 @@ is about to start.
   picker and `tab`/`enter` to complete a name (`↑`/`↓` to choose, keep typing to
   filter by first name or surname). The completed name is sent as a real Teams
   mention, so the person is notified and the mention highlights for everyone.
+- **Spell check:** as you type, misspelled words and their top corrections
+  appear on a strip beneath the compose box. It uses the system spell checker
+  (**enchant-2**, the GNOME/gspell layer, falling back to **hunspell**), so it
+  honours your installed dictionaries and personal word list. Configure the
+  dictionary with `spell_language` (e.g. `en_GB`) or turn it off with
+  `disable_spell_check`; it's silently inactive if no helper is installed.
 - **Presence:** see each participant's Teams status next to their name, and set
   your own status from a popup (`ctrl+s`). While running, the app maintains a
   presence session so your chosen status persists like a native client.
@@ -147,7 +153,9 @@ Default location: `$XDG_CONFIG_HOME/teams-tui/config.json` (typically
   "poll_interval_seconds": 10,
   "meeting_lookahead_minutes": 5,
   "disable_desktop_notify": false,
-  "code_block_style": "monokai"
+  "code_block_style": "monokai",
+  "disable_spell_check": false,
+  "spell_language": ""
 }
 ```
 
@@ -156,6 +164,15 @@ theme used to syntax-highlight code blocks (e.g. `monokai`, `dracula`,
 `github-dark`, `nord`, `solarized-dark`). It defaults to `monokai`; an unknown
 name falls back to that default. It can also be set via
 `TEAMS_TUI_CODE_BLOCK_STYLE`.
+
+`disable_spell_check` turns off compose-box spell checking, and `spell_language`
+selects the dictionary (e.g. `en_US`, `en_GB`; empty uses the system default).
+Spell checking shells out to the system helper — **enchant-2** (the GNOME/gspell
+spell layer), falling back to **hunspell** — so on Fedora/GNOME install the
+`enchant2` and `hunspell` packages plus a dictionary (`hunspell-en`) to enable
+it. Misspelled words and their top suggestions appear on a strip beneath the
+compose box; the feature is silently disabled when no helper is installed. These
+can also be set via `TEAMS_TUI_DISABLE_SPELL_CHECK` and `TEAMS_TUI_SPELL_LANGUAGE`.
 
 For a sovereign cloud or a custom federation host, override `auth_host` and
 `graph_base_url` accordingly.

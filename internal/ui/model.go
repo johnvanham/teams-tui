@@ -18,6 +18,7 @@ import (
 	"github.com/jvh/teams-tui/internal/config"
 	"github.com/jvh/teams-tui/internal/graph"
 	"github.com/jvh/teams-tui/internal/notify"
+	"github.com/jvh/teams-tui/internal/spell"
 )
 
 // phase represents the top-level screen state.
@@ -144,6 +145,15 @@ type Model struct {
 	mentionQuery   string                     // text typed after the "@"
 	mentions       []graph.Mention            // mentions chosen for the pending message
 
+	// Spell checking of the compose box. The checker shells out to the system
+	// helper (enchant-2/hunspell); it's nil when disabled or unavailable, in
+	// which case no strip is shown. spellGen debounces checks: each compose
+	// edit bumps it, and only the matching debounce/result is acted on so a
+	// burst of typing triggers a single check of the final text.
+	speller       *spell.Checker
+	spellGen      int
+	spellMisspell []spell.Misspelling // current misspellings shown in the strip
+
 	// Transient notices.
 	errText     string
 	banner      string
@@ -216,6 +226,16 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 		codeStyle = chromastyles.Get(config.DefaultCodeBlockStyle)
 	}
 
+	// Resolve a spell checker unless disabled. New reports ok=false when no
+	// system helper (enchant-2/hunspell) is installed; we leave speller nil in
+	// that case so the feature stays dormant with no strip and no subprocesses.
+	var speller *spell.Checker
+	if !cfg.DisableSpellCheck {
+		if c, ok := spell.New(cfg.SpellLanguage); ok {
+			speller = c
+		}
+	}
+
 	return Model{
 		ctx:           ctx,
 		cfg:           cfg,
@@ -246,6 +266,7 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 		notifiedUntil: make(map[string]time.Time),
 		focused:       true, // assume focused until told otherwise
 		alerted:       make(map[string]bool),
+		speller:       speller,
 	}
 }
 

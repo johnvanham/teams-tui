@@ -95,8 +95,9 @@ func (m *Model) layout() {
 	composeBoxH := composeInnerH + 2 // border
 	// Reserve one row for the participants/presence header above the messages,
 	// plus the inline emoji popup's rows when it is open (it sits between the
-	// messages and the compose box, stealing height from the viewport).
-	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight() - m.reactPickerHeight() - m.emojiBrowserHeight() - m.mentionPickerHeight()
+	// messages and the compose box, stealing height from the viewport), plus
+	// the spell-check strip below the compose box when it has misspellings.
+	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight() - m.reactPickerHeight() - m.emojiBrowserHeight() - m.mentionPickerHeight() - m.spellStripHeight()
 	if vpInnerH < 1 {
 		vpInnerH = 1
 	}
@@ -272,6 +273,11 @@ func (m Model) viewReady() string {
 		rightParts = append(rightParts, m.viewMentionPicker())
 	}
 	rightParts = append(rightParts, compose)
+	// Spell-check strip sits directly beneath the compose box, listing
+	// misspelled words + top suggestions (only when there are any).
+	if m.spellStripHeight() > 0 {
+		rightParts = append(rightParts, m.viewSpellStrip(boxW))
+	}
 	right := lipgloss.JoinVertical(lipgloss.Left, rightParts...)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, right)
 
@@ -402,6 +408,67 @@ func (m Model) emojiPickerHeight() int {
 		return 0
 	}
 	return len(m.emojiMatches) + 1 + 2 // rows + hint + top/bottom border
+}
+
+// spellStripHeight returns the rows the spell-check strip occupies (1 when
+// there are misspellings to show, else 0). layout() subtracts it from the
+// messages viewport so the vertical budget stays balanced.
+func (m Model) spellStripHeight() int {
+	if len(m.spellMisspell) == 0 {
+		return 0
+	}
+	return 1
+}
+
+// viewSpellStrip renders a one-line summary of misspelled words and their top
+// suggestion under the compose box, e.g.:
+//
+//	spelling: teh→the · recieve→receive · xyzzyq
+//
+// Words are clamped to the available width; a trailing "(+N)" indicates how
+// many further misspellings didn't fit.
+func (m Model) viewSpellStrip(width int) string {
+	if len(m.spellMisspell) == 0 {
+		return ""
+	}
+	label := styles.SpellLabel.Render("spelling: ")
+	sep := styles.SpellLabel.Render(" · ")
+
+	avail := width - lipgloss.Width(label)
+	// Reserve room for a worst-case overflow suffix "(+N)" so the strip never
+	// exceeds the width when it does have to truncate. Computed for the largest
+	// N we could report (all-but-the-first omitted).
+	suffixReserve := lipgloss.Width(fmt.Sprintf(" (+%d)", len(m.spellMisspell)))
+
+	var parts []string
+	used := 0
+	omitted := 0
+	for i, ms := range m.spellMisspell {
+		entry := styles.SpellWord.Render(ms.Word)
+		if len(ms.Suggestions) > 0 {
+			entry += styles.SpellLabel.Render("→") + styles.SpellSuggestion.Render(ms.Suggestions[0])
+		}
+		w := lipgloss.Width(entry)
+		if i > 0 {
+			w += lipgloss.Width(sep)
+		}
+		// Always show at least the first entry; stop once the entry (plus the
+		// reserved overflow suffix, since stopping here means we'll append it)
+		// would exceed the budget.
+		if i > 0 && used+w+suffixReserve > avail {
+			omitted = len(m.spellMisspell) - i
+			break
+		}
+		if i > 0 {
+			parts = append(parts, sep)
+		}
+		parts = append(parts, entry)
+		used += w
+	}
+	if omitted > 0 {
+		parts = append(parts, styles.SpellLabel.Render(fmt.Sprintf(" (+%d)", omitted)))
+	}
+	return label + strings.Join(parts, "")
 }
 
 // reactPickerHeight returns the rows the reaction picker occupies when open
