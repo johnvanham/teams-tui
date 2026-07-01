@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/alecthomas/chroma/v2"
@@ -26,6 +27,20 @@ const (
 	composeMinLines        = 1 // minimum visible rows in the compose box
 )
 
+// tallestHelpGroup returns the number of rows in the longest full-help group.
+// The bubbles help component renders each group as a vertical column laid side
+// by side, so the rendered block's height is that of the tallest column — which
+// layout() must reserve so lower bindings (e.g. ctrl+f) aren't clipped.
+func tallestHelpGroup(groups [][]key.Binding) int {
+	max := 0
+	for _, g := range groups {
+		if len(g) > max {
+			max = len(g)
+		}
+	}
+	return max
+}
+
 // layout recomputes component sizes from the current terminal dimensions. It
 // is called on resize and whenever the help expansion changes the chrome size.
 func (m *Model) layout() {
@@ -40,7 +55,9 @@ func (m *Model) layout() {
 
 	helpHeight := 1
 	if m.help.ShowAll {
-		helpHeight = 3
+		// The full help lays each key group out as a column side by side, so its
+		// height is the tallest group (plus a blank separator row above it).
+		helpHeight = tallestHelpGroup(m.keys.FullHelp()) + 1
 	}
 
 	bannerHeight := 0
