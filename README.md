@@ -46,7 +46,7 @@ is about to start.
   the compose box (`↑`/`↓` to select, `tab`/`enter` to insert, `esc` to dismiss)
   without interrupting your typing. The full standard emoji set is supported, and
   shortcodes match with or without separators — `:nauseatedface:` (the Teams
-  form) and `:nauseated_face:` both work. Press `ctrl+:` to open a browser of
+  form) and `:nauseated_face:` both work. Press `ctrl+j` to open a browser of
   every emoji and filter it interactively.
 - **@-mentions:** in a group or meeting chat, type `@` to open a participant
   picker and `tab`/`enter` to complete a name (`↑`/`↓` to choose, keep typing to
@@ -219,8 +219,9 @@ registration first if your tenant requires it.
 | `q`            | Quote-reply to the selected message (Messages): prefills the composer with the quoted text |
 | `alt+enter`    | Insert a newline in the compose box      |
 | `:` + 2 chars  | Open the inline emoji picker while composing (`↑`/`↓` select, `tab`/`enter` insert, `esc` close) |
-| `ctrl+:`       | Open the full emoji browser while composing: lists every emoji and filters as you type (`↑`/`↓` select, `enter` insert at cursor, `esc` close). Falls back to `ctrl+t` on terminals without the Kitty keyboard protocol |
+| `ctrl+j`       | Open the full emoji browser while composing (mnemonic: emoJi): lists every emoji and filters as you type (`↑`/`↓` select, `enter` insert at cursor, `esc` close) |
 | `@`            | In a group/meeting chat, open the participant picker to @-mention someone (`↑`/`↓` select, `tab`/`enter` complete, keep typing to filter, `esc` dismiss) |
+| `ctrl+f`       | Open the spelling correction picker while composing: choose a `word → suggestion` (`↑`/`↓` select, `enter` apply, `esc` close) |
 | `/`            | Filter the chat list / search contacts   |
 | `ctrl+o`       | Toggle the sidebar between Chats and Contacts (start a new chat) |
 | `ctrl+e`       | Edit a message: the selected message in the Messages pane if it's yours, otherwise your most recent message |
@@ -229,7 +230,7 @@ registration first if your tenant requires it.
 | `esc`          | Clear the compose box (empties typed text, cancels an edit, discards a staged image) |
 | `ctrl+r`       | Refresh now                              |
 | `ctrl+s`       | Open the status picker (set your presence) |
-| `ctrl+g`       | Toggle full help                         |
+| `ctrl+g`       | Toggle full help (`esc` also closes it)  |
 | `ctrl+c`       | Quit                                     |
 
 ## Architecture
