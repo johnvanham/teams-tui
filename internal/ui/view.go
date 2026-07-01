@@ -426,10 +426,12 @@ func (m Model) spellStripHeight() int {
 // viewSpellStrip renders a one-line summary of misspelled words and their top
 // suggestion under the compose box, e.g.:
 //
-//	spelling: teh→the · recieve→receive · xyzzyq
+//	spelling: teh→the · recieve→receive · xyzzyq   ctrl+f to fix
 //
 // Words are clamped to the available width; a trailing "(+N)" indicates how
-// many further misspellings didn't fit.
+// many further misspellings didn't fit. When at least one word has a
+// suggestion, a "ctrl+f to fix" hint is appended (space permitting) so the
+// correction picker is discoverable.
 func (m Model) viewSpellStrip(width int) string {
 	if len(m.spellMisspell) == 0 {
 		return ""
@@ -437,11 +439,21 @@ func (m Model) viewSpellStrip(width int) string {
 	label := styles.SpellLabel.Render("spelling: ")
 	sep := styles.SpellLabel.Render(" · ")
 
+	// A hint pointing at the correction picker, shown only when something is
+	// actually fixable (a misspelling with a suggestion).
+	hint := ""
+	for _, ms := range m.spellMisspell {
+		if len(ms.Suggestions) > 0 {
+			hint = "   " + styles.Hint.Render("ctrl+f to fix")
+			break
+		}
+	}
+
 	avail := width - lipgloss.Width(label)
-	// Reserve room for a worst-case overflow suffix "(+N)" so the strip never
-	// exceeds the width when it does have to truncate. Computed for the largest
-	// N we could report (all-but-the-first omitted).
-	suffixReserve := lipgloss.Width(fmt.Sprintf(" (+%d)", len(m.spellMisspell)))
+	// Reserve room for a worst-case overflow suffix "(+N)" plus the hint so the
+	// strip never exceeds the width once appended. N is the largest we could
+	// report (all-but-the-first omitted).
+	suffixReserve := lipgloss.Width(fmt.Sprintf(" (+%d)", len(m.spellMisspell))) + lipgloss.Width(hint)
 
 	var parts []string
 	used := 0
@@ -456,8 +468,8 @@ func (m Model) viewSpellStrip(width int) string {
 			w += lipgloss.Width(sep)
 		}
 		// Always show at least the first entry; stop once the entry (plus the
-		// reserved overflow suffix, since stopping here means we'll append it)
-		// would exceed the budget.
+		// reserved overflow suffix + hint, since stopping here means we'll
+		// append them) would exceed the budget.
 		if i > 0 && used+w+suffixReserve > avail {
 			omitted = len(m.spellMisspell) - i
 			break
@@ -471,7 +483,11 @@ func (m Model) viewSpellStrip(width int) string {
 	if omitted > 0 {
 		parts = append(parts, styles.SpellLabel.Render(fmt.Sprintf(" (+%d)", omitted)))
 	}
-	return label + strings.Join(parts, "")
+	// Drop the hint if even the reserved space doesn't fit the current width.
+	if used+lipgloss.Width(hint) > avail {
+		hint = ""
+	}
+	return label + strings.Join(parts, "") + hint
 }
 
 // reactPickerHeight returns the rows the reaction picker occupies when open
