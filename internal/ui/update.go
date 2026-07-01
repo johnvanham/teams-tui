@@ -487,6 +487,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleReactPickerKey(msg)
 	}
 
+	// Spelling correction picker captures all input while open.
+	if m.spellPicker {
+		return m.handleSpellPickerKey(msg)
+	}
+
 	// Emoji browser captures all input while open.
 	if m.emojiBrowser {
 		return m.handleEmojiBrowserKey(msg)
@@ -497,6 +502,21 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, m.keys.Emoji) && m.focus == focusCompose {
 		m.openEmojiBrowser()
 		m.layout()
+		return m, nil
+	}
+
+	// Open the spelling correction picker (ctrl+f) while composing. It lists
+	// "word → suggestion" candidates from the current misspellings; selecting
+	// one replaces the word. No-op when there's nothing correctable. Dismiss any
+	// inline emoji/mention popup first so the pickers don't stack.
+	if key.Matches(msg, m.keys.Correct) && m.focus == focusCompose {
+		m.closeEmojiPicker()
+		m.closeMentionPicker()
+		if m.openSpellPicker() {
+			m.layout()
+		} else {
+			m.errText = "Nothing to correct."
+		}
 		return m, nil
 	}
 
@@ -1380,8 +1400,17 @@ func (m Model) handleSpellChecked(msg spellCheckedMsg) (tea.Model, tea.Cmd) {
 	}
 	changed := len(msg.words) != len(m.spellMisspell)
 	m.spellMisspell = msg.words
-	// The strip's presence changes the compose region height, so re-run layout
-	// when it appears or disappears.
+	// If the correction picker is open, rebuild its candidates from the fresh
+	// results (a background re-check may have arrived) so it never applies a
+	// stale fix; close it if there's nothing left to correct.
+	if m.spellPicker {
+		if !m.openSpellPicker() {
+			m.closeSpellPicker()
+		}
+		changed = true
+	}
+	// The strip's/picker's presence changes the compose region height, so
+	// re-run layout when it appears or disappears.
 	if changed {
 		m.layout()
 	}
@@ -1389,10 +1418,12 @@ func (m Model) handleSpellChecked(msg spellCheckedMsg) (tea.Model, tea.Cmd) {
 }
 
 // clearSpellCheck drops any current misspellings (e.g. after send/clear) so the
-// strip disappears immediately rather than lingering until the next check.
+// strip disappears immediately rather than lingering until the next check, and
+// dismisses the correction picker if it was open.
 func (m *Model) clearSpellCheck() {
 	m.spellGen++ // invalidate any in-flight check
 	m.spellMisspell = nil
+	m.closeSpellPicker()
 }
 
 func (m Model) selectedChatID() string {
@@ -1739,6 +1770,36 @@ func (m Model) handleReactPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.reactSel = 0
 		m.refreshReactMatches()
 		m.layout()
+	}
+	return m, nil
+}
+
+// handleSpellPickerKey handles input while the correction picker is open:
+// up/down move the highlight, enter applies the highlighted correction to the
+// compose box (then re-checks so the strip/picker reflect the fix), and esc
+// cancels. Other keys are swallowed so the popup stays modal.
+func (m Model) handleSpellPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.closeSpellPicker()
+		m.layout()
+		return m, nil
+	case "up", "ctrl+p":
+		m.spellPickerMove(-1)
+		return m, nil
+	case "down", "ctrl+n":
+		m.spellPickerMove(1)
+		return m, nil
+	case "enter", "tab":
+		applied := m.applySpellCandidate()
+		m.closeSpellPicker()
+		m.layout()
+		if applied {
+			// Re-check the corrected text so the strip updates and a further
+			// ctrl+f offers the next fix.
+			return m, m.scheduleSpellCheck()
+		}
+		return m, nil
 	}
 	return m, nil
 }

@@ -89,10 +89,16 @@ it.
   installed (feature stays dormant, never errors). `CheckText` pipes the compose
   text to the helper's ispell `-a` mode and parses the reply for misspellings +
   suggestions. In the UI it's driven off `Update`: a compose edit bumps
-  `Model.spellGen` and arms `spellDebounceCmd`; when the debounce fires (and the
+  `Model.spellGen` and arms   `spellDebounceCmd`; when the debounce fires (and the
   generation still matches) `spellCheckCmd` runs the check in a `tea.Cmd`, and
   `viewSpellStrip` renders the result beneath the compose box. `spellStripHeight`
   feeds `layout()` so the strip steals a row from the messages viewport.
+- `ui/spellpicker.go` — the `ctrl+f` correction picker. `openSpellPicker`
+  flattens the current misspellings into `word → suggestion` candidates;
+  `applySpellCandidate` splices the chosen suggestion into the compose box
+  (whole-word match via `findWord`) using the same cursor-reposition pattern as
+  the emoji/mention pickers. `handleSpellPickerKey` drives it and re-checks after
+  a fix; `viewSpellPicker`/`spellPickerHeight` render it like the other popups.
 
 ## Conventions
 

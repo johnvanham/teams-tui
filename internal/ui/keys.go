@@ -22,6 +22,7 @@ type keyMap struct {
 	React    key.Binding
 	Quote    key.Binding
 	Emoji    key.Binding
+	Correct  key.Binding
 }
 
 func defaultKeyMap() keyMap {
@@ -89,6 +90,10 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("ctrl+:", "ctrl+t"),
 			key.WithHelp("ctrl+:", "emoji picker"),
 		),
+		Correct: key.NewBinding(
+			key.WithKeys("ctrl+f"),
+			key.WithHelp("ctrl+f", "fix spelling"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("ctrl+g", "f1", "?"),
 			key.WithHelp("ctrl+g", "help"),
@@ -110,7 +115,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.NextPane, k.PrevPane},
 		{k.Send, k.Newline, k.Edit, k.Image, k.Paste},
-		{k.React, k.Quote, k.Emoji, k.Contacts, k.Status, k.Refresh},
+		{k.React, k.Quote, k.Emoji, k.Correct, k.Contacts, k.Status, k.Refresh},
 		{k.Help, k.Quit},
 	}
 }

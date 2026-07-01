@@ -97,7 +97,7 @@ func (m *Model) layout() {
 	// plus the inline emoji popup's rows when it is open (it sits between the
 	// messages and the compose box, stealing height from the viewport), plus
 	// the spell-check strip below the compose box when it has misspellings.
-	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight() - m.reactPickerHeight() - m.emojiBrowserHeight() - m.mentionPickerHeight() - m.spellStripHeight()
+	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight() - m.reactPickerHeight() - m.emojiBrowserHeight() - m.mentionPickerHeight() - m.spellPickerHeight() - m.spellStripHeight()
 	if vpInnerH < 1 {
 		vpInnerH = 1
 	}
@@ -271,6 +271,9 @@ func (m Model) viewReady() string {
 	}
 	if m.mentionPicker {
 		rightParts = append(rightParts, m.viewMentionPicker())
+	}
+	if m.spellPicker {
+		rightParts = append(rightParts, m.viewSpellPicker())
 	}
 	rightParts = append(rightParts, compose)
 	// Spell-check strip sits directly beneath the compose box, listing
@@ -555,6 +558,38 @@ func (m Model) viewEmojiBrowser() string {
 	}
 	hint := styles.Hint.Render("type to filter · ↑↓ select · enter insert · esc cancel")
 	body := lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinVertical(lipgloss.Left, rows...), hint)
+	return styles.EmojiPicker.Render(body)
+}
+
+// spellPickerHeight returns the rows the correction picker occupies when open
+// (one row per candidate + a hint row + the box border), or 0 when closed.
+// layout() subtracts this from the messages viewport like the other pickers.
+func (m Model) spellPickerHeight() int {
+	if !m.spellPicker || len(m.spellCandidates) == 0 {
+		return 0
+	}
+	return len(m.spellCandidates) + 1 + 2 // rows + hint + top/bottom border
+}
+
+// viewSpellPicker renders the spelling correction chooser: one row per
+// "word → suggestion" candidate (the highlighted row reverse-styled) plus a
+// navigation hint.
+func (m Model) viewSpellPicker() string {
+	if len(m.spellCandidates) == 0 {
+		return ""
+	}
+	rows := make([]string, 0, len(m.spellCandidates))
+	for i, c := range m.spellCandidates {
+		label := c.Word + " → " + c.Suggestion
+		if i == m.spellPickerSel {
+			rows = append(rows, styles.EmojiPickerSelected.Render(" "+label+" "))
+		} else {
+			rows = append(rows, styles.EmojiPickerItem.Render(" "+label+" "))
+		}
+	}
+	list := lipgloss.JoinVertical(lipgloss.Left, rows...)
+	hint := styles.Hint.Render("↑↓ select · enter fix · esc close")
+	body := lipgloss.JoinVertical(lipgloss.Left, list, hint)
 	return styles.EmojiPicker.Render(body)
 }
 

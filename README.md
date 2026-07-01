@@ -53,11 +53,13 @@ is about to start.
   filter by first name or surname). The completed name is sent as a real Teams
   mention, so the person is notified and the mention highlights for everyone.
 - **Spell check:** as you type, misspelled words and their top corrections
-  appear on a strip beneath the compose box. It uses the system spell checker
-  (**enchant-2**, the GNOME/gspell layer, falling back to **hunspell**), so it
-  honours your installed dictionaries and personal word list. Configure the
-  dictionary with `spell_language` (e.g. `en_GB`) or turn it off with
-  `disable_spell_check`; it's silently inactive if no helper is installed.
+  appear on a strip beneath the compose box. Press `ctrl+f` while composing to
+  open a correction picker (`↑`/`↓` to choose a `word → suggestion`, `enter` to
+  apply, `esc` to cancel). It uses the system spell checker (**enchant-2**, the
+  GNOME/gspell layer, falling back to **hunspell**), so it honours your
+  installed dictionaries and personal word list. Configure the dictionary with
+  `spell_language` (e.g. `en_GB`) or turn it off with `disable_spell_check`;
+  it's silently inactive if no helper is installed.
 - **Presence:** see each participant's Teams status next to their name, and set
   your own status from a popup (`ctrl+s`). While running, the app maintains a
   presence session so your chosen status persists like a native client.

@@ -154,6 +154,13 @@ type Model struct {
 	spellGen      int
 	spellMisspell []spell.Misspelling // current misspellings shown in the strip
 
+	// Spelling correction picker (opened with ctrl+f while composing): a popup
+	// listing "word → suggestion" candidates; selecting one replaces the word
+	// in the compose box.
+	spellPicker     bool             // popup currently shown
+	spellCandidates []spellCandidate // flattened word→suggestion choices
+	spellPickerSel  int              // highlighted candidate index
+
 	// Transient notices.
 	errText     string
 	banner      string
