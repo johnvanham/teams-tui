@@ -204,4 +204,10 @@ var (
 
 	// SpellSuggestion styles a suggested correction shown after a misspelling.
 	SpellSuggestion = lipgloss.NewStyle().Foreground(LightGrey)
+
+	// ScrollbarTrack is the dim gutter drawn down the right edge of the
+	// messages viewport; ScrollbarThumb is the brighter handle marking the
+	// visible slice of the conversation within it.
+	ScrollbarTrack = lipgloss.NewStyle().Foreground(Grey)
+	ScrollbarThumb = lipgloss.NewStyle().Foreground(PurpleLt)
 )

@@ -25,6 +25,7 @@ const (
 	sidebarHeaderRows      = 1 // "Chats" header drawn inside the sidebar chrome
 	participantsHeaderRows = 1 // presence header above the conversation
 	composeMinLines        = 1 // minimum visible rows in the compose box
+	scrollbarWidth         = 1 // gutter column for the messages scroll indicator
 )
 
 // tallestHelpGroup returns the number of rows in the longest full-help group.
@@ -119,7 +120,13 @@ func (m *Model) layout() {
 		vpInnerH = 1
 	}
 
-	m.viewport.SetWidth(rightInnerW)
+	// Reserve the rightmost inner column for the scroll indicator gutter, so
+	// the wrapped message text never collides with the bar.
+	vpContentW := rightInnerW - scrollbarWidth
+	if vpContentW < 1 {
+		vpContentW = 1
+	}
+	m.viewport.SetWidth(vpContentW)
 	m.viewport.SetHeight(vpInnerH)
 	m.help.SetWidth(m.width)
 
@@ -260,12 +267,18 @@ func (m Model) viewReady() string {
 	}
 	boxW := rightW // lipgloss .Width is the total rendered width incl. border
 
-	// Messages pane.
+	// Messages pane. The viewport content sits left of a one-column scroll
+	// indicator gutter, so it's clear when we're not at the latest message.
 	msgStyle := styles.MessagePaneBlurred
 	if m.focus == focusMessages {
 		msgStyle = styles.MessagePaneFocused
 	}
-	messages := msgStyle.Width(boxW).Render(m.viewport.View())
+	msgInner := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		m.viewport.View(),
+		m.scrollbar(m.viewport.Height()),
+	)
+	messages := msgStyle.Width(boxW).Render(msgInner)
 
 	// Compose box.
 	composeStyle := styles.ComposeBlurred
@@ -912,6 +925,61 @@ func (m *Model) scrollToSelection() {
 	} else if top >= off+height {
 		m.viewport.SetYOffset(top - height + 1)
 	}
+}
+
+// scrollbar renders a one-column vertical scrollbar of the given height for the
+// messages viewport: a dim track with a brighter thumb whose size and position
+// reflect how much of the conversation is visible and where the window sits.
+// It returns an empty string (no bar) when everything already fits on screen,
+// so the gutter only appears once the conversation overflows.
+func (m *Model) scrollbar(height int) string {
+	if height < 1 {
+		return ""
+	}
+	total := m.viewport.TotalLineCount()
+	// Nothing to scroll: the whole conversation fits, so draw no bar (the
+	// caller leaves the reserved column blank).
+	if total <= height {
+		return strings.Repeat("\n", height-1)
+	}
+
+	// Thumb size is proportional to the visible fraction, at least one cell.
+	thumb := height * height / total
+	if thumb < 1 {
+		thumb = 1
+	}
+	if thumb > height {
+		thumb = height
+	}
+
+	// Position the thumb by scroll progress. AtBottom pins it flush to the end
+	// so "we're at the latest" is unambiguous even with rounding.
+	space := height - thumb
+	var pos int
+	if m.viewport.AtBottom() {
+		pos = space
+	} else {
+		pos = int(m.viewport.ScrollPercent() * float64(space))
+		if pos < 0 {
+			pos = 0
+		}
+		if pos > space {
+			pos = space
+		}
+	}
+
+	var b strings.Builder
+	for i := 0; i < height; i++ {
+		if i >= pos && i < pos+thumb {
+			b.WriteString(styles.ScrollbarThumb.Render("█"))
+		} else {
+			b.WriteString(styles.ScrollbarTrack.Render("│"))
+		}
+		if i < height-1 {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
 }
 
 // codeFence is the marker line graph.MessageBody.PlainText emits around code
