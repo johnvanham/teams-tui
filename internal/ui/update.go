@@ -497,7 +497,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleEmojiBrowserKey(msg)
 	}
 
-	// Open the full emoji browser (ctrl+:) while composing. It lists every
+	// Open the full emoji browser (ctrl+j) while composing. It lists every
 	// emoji and filters as you type; the chosen glyph is inserted at the cursor.
 	if key.Matches(msg, m.keys.Emoji) && m.focus == focusCompose {
 		m.openEmojiBrowser()

@@ -32,7 +32,7 @@ func defaultKeyMap() keyMap {
 			key.WithHelp("enter", "send"),
 		),
 		Newline: key.NewBinding(
-			key.WithKeys("alt+enter", "ctrl+j"),
+			key.WithKeys("alt+enter"),
 			key.WithHelp("alt+enter", "newline"),
 		),
 		NextPane: key.NewBinding(
@@ -83,12 +83,13 @@ func defaultKeyMap() keyMap {
 			key.WithKeys("q"),
 			key.WithHelp("q", "quote (msgs)"),
 		),
-		// ctrl+: is the requested binding; it only reaches the app on terminals
-		// that support the Kitty keyboard protocol (Kitty, Ghostty, WezTerm, …).
-		// ctrl+t is a portable fallback that works everywhere.
+		// ctrl+j opens the emoji browser (mnemonic: emoJi). It works on every
+		// terminal, unlike ctrl+:, which only reaches the app under the Kitty
+		// keyboard protocol. Newline is alt+enter (ctrl+j is no longer bound to
+		// it) so there's no conflict while composing.
 		Emoji: key.NewBinding(
-			key.WithKeys("ctrl+:", "ctrl+t"),
-			key.WithHelp("ctrl+:", "emoji picker"),
+			key.WithKeys("ctrl+j"),
+			key.WithHelp("ctrl+j", "emoji picker"),
 		),
 		Correct: key.NewBinding(
 			key.WithKeys("ctrl+f"),

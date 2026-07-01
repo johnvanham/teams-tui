@@ -11,7 +11,7 @@ import (
 const emojiBrowserMax = 8
 
 // openEmojiBrowser shows the full emoji browser, seeded with the complete emoji
-// table so the user can scroll or type to filter. It is opened with "ctrl+:"
+// table so the user can scroll or type to filter. It is opened with "ctrl+j"
 // while the compose box is focused; the chosen glyph is inserted at the cursor.
 func (m *Model) openEmojiBrowser() {
 	m.emojiBrowser = true
