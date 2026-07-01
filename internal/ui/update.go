@@ -546,6 +546,14 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// Esc closes the expanded help view first (before it's consumed elsewhere,
+	// e.g. clearing the compose box), so it's a natural way to dismiss help.
+	if m.help.ShowAll && msg.String() == "esc" {
+		m.help.ShowAll = false
+		m.layout()
+		return m, nil
+	}
+
 	// Toggle help. "ctrl+g" and "f1" always work; "?" only toggles help when the
 	// compose box is NOT focused, so it can still be typed into messages.
 	switch s := msg.String(); {
