@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/jvh/teams-tui/internal/auth"
@@ -222,12 +223,19 @@ func (c *Client) ListChats(ctx context.Context, top int) ([]Chat, error) {
 // MarkChatRead marks a chat as read for the signed-in user, advancing the
 // server-side viewpoint.lastMessageReadDateTime so the chat stops showing as
 // unread (here and on the user's other devices). It POSTs to the
-// markChatReadForUser action with the user's own id as the user reference.
-// Graph responds 204 No Content on success.
+// markChatReadForUser action with the user's own id and tenant id as the user
+// reference. Graph rejects the request ("TenantId for the user must be
+// specified") unless tenantId is present, so we derive it from the access
+// token's tid claim. Graph responds 204 No Content on success.
 func (c *Client) MarkChatRead(ctx context.Context, chatID, userID string) error {
+	tenantID, err := c.tenantID(ctx)
+	if err != nil {
+		return err
+	}
 	payload := map[string]any{
 		"user": map[string]string{
-			"id": userID,
+			"id":       userID,
+			"tenantId": tenantID,
 		},
 	}
 	buf, err := json.Marshal(payload)
@@ -236,6 +244,36 @@ func (c *Client) MarkChatRead(ctx context.Context, chatID, userID string) error 
 	}
 	path := fmt.Sprintf("/chats/%s/markChatReadForUser", url.PathEscape(chatID))
 	return c.do(ctx, http.MethodPost, path, bytes.NewReader(buf), nil, nil)
+}
+
+// tenantID extracts the signed-in user's tenant (directory) id from the access
+// token's "tid" claim. Entra access tokens always carry tid, so this avoids an
+// extra Graph call and works even when the configured tenant is the
+// "organizations"/"common" alias rather than a concrete GUID.
+func (c *Client) tenantID(ctx context.Context) (string, error) {
+	tok, err := c.tokens.Token(ctx)
+	if err != nil {
+		return "", err
+	}
+	// A JWT is header.payload.signature; the payload is base64url-encoded JSON.
+	parts := strings.Split(tok, ".")
+	if len(parts) < 2 {
+		return "", fmt.Errorf("access token is not a JWT")
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("decoding token payload: %w", err)
+	}
+	var claims struct {
+		TID string `json:"tid"`
+	}
+	if err := json.Unmarshal(raw, &claims); err != nil {
+		return "", fmt.Errorf("parsing token claims: %w", err)
+	}
+	if claims.TID == "" {
+		return "", fmt.Errorf("access token has no tid claim")
+	}
+	return claims.TID, nil
 }
 
 // ListPeople returns contacts relevant to the signed-in user via GET

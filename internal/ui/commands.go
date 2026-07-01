@@ -469,13 +469,17 @@ func clearSessionCmd(ctx context.Context, c *graph.Client, userID, sessionID str
 	}
 }
 
-// markChatReadCmd marks a chat as read on the server (best-effort, fire and
-// forget). The unread highlight is already cleared locally when the chat opens,
-// so a failure here only means the read state won't sync to other devices until
-// the next read; we therefore swallow the error.
+// markChatReadCmd marks a chat as read on the server. The unread highlight is
+// already cleared locally when the chat opens; persisting to the server makes
+// the read state survive an app restart (it's the only read signal we have on
+// startup, since the local horizon is in-memory). Surface any failure as an
+// errMsg so a broken mark-read isn't silent — a swallowed error here is exactly
+// what makes an already-read chat re-flag as unread on every reload.
 func markChatReadCmd(ctx context.Context, c *graph.Client, chatID, userID string) tea.Cmd {
 	return func() tea.Msg {
-		_ = c.MarkChatRead(ctx, chatID, userID)
+		if err := c.MarkChatRead(ctx, chatID, userID); err != nil {
+			return errMsg{err}
+		}
 		return nil
 	}
 }
