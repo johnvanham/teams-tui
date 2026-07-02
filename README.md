@@ -69,6 +69,16 @@ is about to start.
   across all your chats (your own messages and the chat you're actively viewing
   while the terminal is focused are skipped). Disable with
   `disable_desktop_notify`, which also turns off meeting alerts.
+- **Click to jump to the chat:** on Linux, clicking a message notification
+  raises the terminal window, selects teams-tui's tmux pane (auto-detected from
+  `$TMUX_PANE`), and switches to the sending chat. Window raising uses the
+  `focus_command` config (default targets GNOME's Ptyxis via its D-Bus
+  activation, passing the notification's XDG activation token so Wayland allows
+  the raise); set your own command for other terminals/WMs — e.g. an X11
+  `wmctrl -a`/`xdotool` invocation — or `"-"` to disable raising while still
+  switching the chat. Clickable notifications need a D-Bus notification daemon
+  that advertises the `actions` capability; elsewhere the notification still
+  appears but isn't clickable.
 - **Hybrid-friendly auth:** uses the OAuth 2.0 **device authorization grant**,
   so sign-in happens in your real browser. This works for both fully
   Entra-hosted tenants and **hybrid Entra/Active Directory federated** setups —
@@ -157,7 +167,8 @@ Default location: `$XDG_CONFIG_HOME/teams-tui/config.json` (typically
   "disable_desktop_notify": false,
   "code_block_style": "monokai",
   "disable_spell_check": false,
-  "spell_language": ""
+  "spell_language": "",
+  "focus_command": "gdbus call --session --dest org.gnome.Ptyxis --object-path /org/gnome/Ptyxis --method org.freedesktop.Application.Activate \"{'activation-token': <'{token}'>}\""
 }
 ```
 
@@ -175,6 +186,15 @@ spell layer), falling back to **hunspell** — so on Fedora/GNOME install the
 it. Misspelled words and their top suggestions appear on a strip beneath the
 compose box; the feature is silently disabled when no helper is installed. These
 can also be set via `TEAMS_TUI_DISABLE_SPELL_CHECK` and `TEAMS_TUI_SPELL_LANGUAGE`.
+
+`focus_command` is the shell command run when a desktop notification is clicked,
+to raise the terminal window (see *Click to jump to the chat* above). The literal
+`{token}` is replaced with the notification's XDG activation token, which is also
+exported to the command as `XDG_ACTIVATION_TOKEN`. It defaults to the GNOME
+Ptyxis command shown above; set it to another terminal/WM command (X11 users can
+use `wmctrl -a teams-tui` or an `xdotool` invocation) or `"-"` to disable window
+raising while still switching chats and selecting the tmux pane. Overridable via
+`TEAMS_TUI_FOCUS_COMMAND`.
 
 For a sovereign cloud or a custom federation host, override `auth_host` and
 `graph_base_url` accordingly.
@@ -242,7 +262,8 @@ cmd/teams-tui        program entrypoint, signal handling, wiring
 internal/config      config loading (env + JSON) and endpoint URLs
 internal/auth        OAuth device-code flow, refresh, keyring token store
 internal/graph       Microsoft Graph client (chats, messages, calendar) + types
-internal/notify      desktop notifications (beeep), degrade-gracefully
+internal/notify      desktop notifications (beeep + D-Bus actions), degrade-gracefully
+internal/focus       raise terminal window + select tmux pane on notification click
 internal/ui          Bubble Tea v2 model/update/view, commands, components
 internal/ui/styles   Lip Gloss styles
 ```

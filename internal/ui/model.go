@@ -3,6 +3,7 @@ package ui
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"charm.land/bubbles/v2/help"
@@ -182,6 +183,38 @@ type Model struct {
 
 	// Meeting de-duplication: event IDs already alerted.
 	alerted map[string]bool
+
+	// Notification click-to-focus. tmuxPane is this process's $TMUX_PANE (empty
+	// when not under tmux), used to select the right pane on a click. sender is
+	// a shared handle whose Send is wired to the running tea.Program after it's
+	// created (see SetProgram); the notification-click callback runs on a
+	// background goroutine and uses it to inject an openChatByIDMsg into Update.
+	tmuxPane string
+	sender   *programSender
+}
+
+// programSender is a mutable handle to the running program's Send method. The
+// Model is copied by value through Update, so the click callback closes over
+// this pointer (set once after the program starts) rather than a Send func that
+// wouldn't exist yet at New time.
+type programSender struct {
+	send func(tea.Msg)
+}
+
+// Send delivers a message into the running program if wired, else drops it.
+func (s *programSender) Send(msg tea.Msg) {
+	if s != nil && s.send != nil {
+		s.send(msg)
+	}
+}
+
+// SetProgram wires the model's notification-click sender to the running
+// program. Call it once, after tea.NewProgram, before p.Run. It is safe because
+// the sender is a pointer shared with every by-value copy of the Model.
+func (m Model) SetProgram(p interface{ Send(tea.Msg) }) {
+	if m.sender != nil {
+		m.sender.send = p.Send
+	}
 }
 
 // New constructs the root model and its sub-components.
@@ -288,6 +321,8 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 		focused:       true, // assume focused until told otherwise
 		alerted:       make(map[string]bool),
 		speller:       speller,
+		tmuxPane:      os.Getenv("TMUX_PANE"),
+		sender:        &programSender{},
 	}
 }
 

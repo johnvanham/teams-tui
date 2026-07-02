@@ -53,10 +53,15 @@ func run() error {
 	authenticator := auth.New(cfg)
 	store := auth.NewStore()
 	notifier := notify.New(!cfg.DisableDesktopNotify)
+	// Release the D-Bus connection backing clickable notifications on exit.
+	defer notifier.Close()
 
 	model := ui.New(ctx, cfg, authenticator, store, notifier)
 
 	p := tea.NewProgram(model, tea.WithContext(ctx))
+	// Wire the notification-click sender so a clicked notification can inject a
+	// chat-switch message into the running program from its D-Bus goroutine.
+	model.SetProgram(p)
 	if _, err := p.Run(); err != nil {
 		return err
 	}

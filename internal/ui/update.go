@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/jvh/teams-tui/internal/clipboard"
+	"github.com/jvh/teams-tui/internal/focus"
 	"github.com/jvh/teams-tui/internal/graph"
 )
 
@@ -171,6 +172,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case chatCreatedMsg:
 		return m.handleChatCreated(msg)
+
+	case openChatByIDMsg:
+		return m.handleOpenChatByID(msg)
 
 	case imageOpenedMsg:
 		m.openingImage = false
@@ -1081,6 +1085,40 @@ func (m Model) handleChatCreated(msg chatCreatedMsg) (tea.Model, tea.Cmd) {
 	)
 }
 
+// handleOpenChatByID switches to the chat named in a clicked notification. It
+// mirrors handleChatCreated: bring the sidebar back to chats and open the chat.
+// The window/pane were already raised by the click callback; here we only move
+// the in-app selection. If the chat isn't cached yet (rare — the notification
+// came from a chat-list poll that cached it), a chat reload is kicked off and
+// openChat still sets currentChat so the pending load lands on the right chat.
+func (m Model) handleOpenChatByID(msg openChatByIDMsg) (tea.Model, tea.Cmd) {
+	if msg.chatID == "" {
+		return m, nil
+	}
+	if m.phase != phaseReady {
+		return m, nil // not ready to show a chat yet; ignore the click
+	}
+	m.sidebarMode = sidebarChats
+	m.focus = focusMessages
+	m.selectChatInList(msg.chatID)
+	openCmd := m.openChat(msg.chatID)
+	if _, known := m.chats[msg.chatID]; !known {
+		return m, tea.Batch(loadChatsCmd(m.ctx, m.client), openCmd)
+	}
+	return m, openCmd
+}
+
+// selectChatInList moves the sidebar list's highlight to chatID so the opened
+// chat is also the selected row. No-op when the chat isn't in the current list.
+func (m *Model) selectChatInList(chatID string) {
+	for i, id := range m.chatOrder {
+		if id == chatID {
+			m.list.Select(i)
+			return
+		}
+	}
+}
+
 func (m Model) handleMessages(msg messagesMsg) (tea.Model, tea.Cmd) {
 	delete(m.chatErrors, msg.chatID) // a successful load clears any prior error
 
@@ -1184,7 +1222,30 @@ func (m *Model) notifyNewChatMessages(chats []graph.Chat, baseline bool) {
 		if name := c.DisplayName(self); name != "" {
 			title = name
 		}
-		m.notifier.Notify(title, notifyPreview(text))
+		m.notifier.NotifyWithAction(title, notifyPreview(text), m.onNotificationClick(c.ID))
+	}
+}
+
+// onNotificationClick returns the callback run when the desktop notification
+// for chatID is clicked. It runs on the notifier's background goroutine, so it
+// touches only concurrency-safe things: it raises the terminal window (via the
+// configured focus command + activation token), selects this process's tmux
+// pane, then injects an openChatByIDMsg into the running program so Update can
+// switch to the chat on the UI goroutine. Window/pane focusing is best-effort;
+// the chat switch is what matters and always runs.
+func (m *Model) onNotificationClick(chatID string) func(activationToken string) {
+	sender := m.sender
+	pane := m.tmuxPane
+	focusCmd := ""
+	if m.cfg.FocusCommandEnabled() {
+		focusCmd = m.cfg.FocusCommand
+	}
+	return func(activationToken string) {
+		if focusCmd != "" {
+			_ = focus.RaiseTerminal(focusCmd, activationToken)
+		}
+		_ = focus.SelectTmuxPane(pane)
+		sender.Send(openChatByIDMsg{chatID: chatID})
 	}
 }
 

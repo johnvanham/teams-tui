@@ -43,7 +43,8 @@ into a single `Update`. Never block in `Update` or `View`; do I/O in a `tea.Cmd`
 | config | `internal/config/` | env + JSON config, endpoint URLs |
 | auth | `internal/auth/` | device-code OAuth, refresh, OS keyring |
 | graph | `internal/graph/` | Microsoft Graph REST client + models |
-| notify | `internal/notify/` | desktop notifications |
+| notify | `internal/notify/` | desktop notifications (beeep + D-Bus clickable actions) |
+| focus | `internal/focus/` | raise terminal window + select tmux pane on notification click |
 | spell | `internal/spell/` | compose-box spell check (enchant-2/hunspell subprocess) |
 | ui | `internal/ui/` | Bubble Tea model/update/view |
 | styles | `internal/ui/styles/` | Lip Gloss styling |
@@ -82,6 +83,29 @@ The code-block fence convention (the literal ```` ``` ```` plus optional
 language) is shared between `graph/code.go` (parsing), `graph/compose.go`
 (sending), and `ui/view.go` (rendering) — keep the three in sync when changing
 it.
+
+### Notifications & click-to-focus (`internal/notify/`, `internal/focus/`)
+- `notify/notify.go` — `Notifier` wraps beeep for plain `Notify`/`Alert` and
+  adds `NotifyWithAction(title, msg, onClick)` for clickable notifications.
+  `onClick` receives the XDG activation token and runs on a background goroutine.
+- `notify/dbus_linux.go` — the actionable backend. Talks to
+  `org.freedesktop.Notifications` over D-Bus directly (godbus), sends a
+  `default` action, and listens on one signal channel for `ActivationToken`
+  (stashed per notification id) and `ActionInvoked` (fires the stored callback
+  with that token). `newActionBackend` returns nil (→ plain-notify fallback)
+  when there's no session bus or the daemon lacks the `actions` capability.
+  `dbus_other.go` is the non-Linux stub.
+- `focus/focus.go` — `RaiseTerminal(template, token)` runs the configured
+  `focus_command` (via `sh -c`, `{token}` substituted + `XDG_ACTIVATION_TOKEN`
+  exported); `SelectTmuxPane(pane)` runs `tmux select-window`/`select-pane`.
+  Both are best-effort no-ops when unconfigured / outside tmux.
+- Wiring: `notifyNewChatMessages` (`ui/update.go`) builds the click callback via
+  `onNotificationClick(chatID)` → raise + tmux-select + `sender.Send(openChatByIDMsg{})`.
+  The `sender` (`*programSender` on `Model`) is pointed at `p.Send` by
+  `Model.SetProgram` in `main.go` after the program is created (the Model is
+  copied by value, so the send hook must be behind a shared pointer). `Update`
+  handles `openChatByIDMsg` via `handleOpenChatByID`, which mirrors
+  `handleChatCreated`. tmux target auto-detected from `$TMUX_PANE` in `New`.
 
 ### Spell check (`internal/spell/`)
 - `spell.go` — thin subprocess wrapper. `New(lang)` resolves a system helper

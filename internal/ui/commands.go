@@ -29,6 +29,11 @@ type authDoneMsg struct {
 // errMsg is a generic error surfaced to the UI.
 type errMsg struct{ err error }
 
+// openChatByIDMsg asks the UI to switch to a specific chat. It's injected from
+// outside the Update loop (the desktop-notification click callback) via the
+// program's Send, then handled like an internal chat switch.
+type openChatByIDMsg struct{ chatID string }
+
 // meMsg carries the signed-in user's profile.
 type meMsg struct{ me *graph.User }
 

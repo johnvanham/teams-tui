@@ -53,7 +53,28 @@ type Config struct {
 	// "en_GB"). Empty uses the system helper's default dictionary. Run
 	// `enchant-2 -list-dicts` to see what's installed.
 	SpellLanguage string `json:"spell_language,omitempty"`
+	// FocusCommand is a shell command (run via `sh -c`) executed when a desktop
+	// notification is clicked, to raise the terminal window running teams-tui.
+	// The literal token `{token}` is replaced with the notification's XDG
+	// activation token (also exported to the child as XDG_ACTIVATION_TOKEN),
+	// which lets Wayland compositors honour the focus request. Defaults to
+	// DefaultFocusCommand (GNOME's Ptyxis terminal). Set to "-" (or configure a
+	// terminal-specific command) to disable or customise window raising; on
+	// click teams-tui always still switches to the chat and selects its tmux
+	// pane regardless of this command.
+	FocusCommand string `json:"focus_command,omitempty"`
 }
+
+// DefaultFocusCommand raises the GNOME Ptyxis terminal window via its
+// org.freedesktop.Application D-Bus interface, passing the notification's XDG
+// activation token so the Wayland compositor allows the window to come forward.
+// Users on other terminals/compositors can override focus_command (e.g. an
+// X11 `wmctrl -a`/`xdotool` invocation) or set it to "-" to disable raising.
+const DefaultFocusCommand = `gdbus call --session ` +
+	`--dest org.gnome.Ptyxis ` +
+	`--object-path /org/gnome/Ptyxis ` +
+	`--method org.freedesktop.Application.Activate ` +
+	`"{'activation-token': <'{token}'>}"`
 
 // DefaultCodeBlockStyle is the chroma theme used to colour code blocks when the
 // config doesn't specify one.
@@ -114,6 +135,9 @@ func Load() (*Config, error) {
 	if v := os.Getenv("TEAMS_TUI_SPELL_LANGUAGE"); v != "" {
 		cfg.SpellLanguage = v
 	}
+	if v := os.Getenv("TEAMS_TUI_FOCUS_COMMAND"); v != "" {
+		cfg.FocusCommand = v
+	}
 
 	cfg.applyDefaults()
 
@@ -147,6 +171,16 @@ func (c *Config) applyDefaults() {
 	if c.CodeBlockStyle == "" {
 		c.CodeBlockStyle = DefaultCodeBlockStyle
 	}
+	if c.FocusCommand == "" {
+		c.FocusCommand = DefaultFocusCommand
+	}
+}
+
+// FocusCommandEnabled reports whether a notification click should attempt to
+// raise the terminal window. A value of "-" (or empty, once defaults are
+// applied it never is) disables raising while leaving chat switching intact.
+func (c *Config) FocusCommandEnabled() bool {
+	return c.FocusCommand != "" && c.FocusCommand != "-"
 }
 
 func (c *Config) validate() error {

@@ -6,5 +6,6 @@
   "disable_desktop_notify": false,
   "code_block_style": "monokai",
   "disable_spell_check": false,
-  "spell_language": ""
+  "spell_language": "",
+  "focus_command": "gdbus call --session --dest org.gnome.Ptyxis --object-path /org/gnome/Ptyxis --method org.freedesktop.Application.Activate \"{'activation-token': <'{token}'>}\""
 }

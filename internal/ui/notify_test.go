@@ -4,6 +4,9 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/jvh/teams-tui/internal/config"
 	"github.com/jvh/teams-tui/internal/graph"
 	"github.com/jvh/teams-tui/internal/notify"
 )
@@ -18,6 +21,8 @@ func newTestModel() (*Model, *[]notify.Capture) {
 		me:            &graph.User{ID: "me"},
 		chats:         make(map[string]graph.Chat),
 		notifiedUntil: make(map[string]time.Time),
+		cfg:           &config.Config{FocusCommand: "-"}, // disable window raising in tests
+		sender:        &programSender{},
 	}
 	return m, got
 }
@@ -111,6 +116,35 @@ func TestNotifyNewChatMessages(t *testing.T) {
 		m.notifyNewChatMessages(next, false)
 		if len(*got) != 1 {
 			t.Fatalf("unfocused current chat notified %d times, want 1", len(*got))
+		}
+	})
+
+	t.Run("clicking the notification sends an open-chat message", func(t *testing.T) {
+		m, got := newTestModel()
+		var sent []tea.Msg
+		m.sender.send = func(msg tea.Msg) { sent = append(sent, msg) }
+
+		base := []graph.Chat{chatWithPreview("c9", "other", "hi", t0)}
+		m.notifyNewChatMessages(base, true)
+		next := []graph.Chat{chatWithPreview("c9", "other", "ping", t0.Add(time.Minute))}
+		m.notifyNewChatMessages(next, false)
+
+		if len(*got) != 1 || (*got)[0].Action == nil {
+			t.Fatalf("expected 1 actionable notification, got %d", len(*got))
+		}
+		// Simulate a click with a stub activation token; focus command is "-"
+		// (disabled) and we're not in tmux, so only the Send should fire.
+		(*got)[0].Action("token")
+
+		if len(sent) != 1 {
+			t.Fatalf("click sent %d messages, want 1", len(sent))
+		}
+		open, ok := sent[0].(openChatByIDMsg)
+		if !ok {
+			t.Fatalf("sent message type = %T, want openChatByIDMsg", sent[0])
+		}
+		if open.chatID != "c9" {
+			t.Errorf("openChatByIDMsg.chatID = %q, want %q", open.chatID, "c9")
 		}
 	})
 }
