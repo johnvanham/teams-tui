@@ -249,6 +249,10 @@ func New(ctx context.Context, cfg *config.Config, a *auth.Authenticator, store *
 	ta.MinHeight = composeMinLines
 	ta.MaxHeight = composeMinLines // real cap set in layout() from screen size
 	ta.SetHeight(composeMinLines)
+	// Drop the textarea's default gutter (the left bar prompt and per-line
+	// numbers): a chat compose box isn't a code editor, so they're just noise.
+	ta.Prompt = ""
+	ta.ShowLineNumbers = false
 	// Add ctrl+left/right as word-jump bindings (alongside the textarea's
 	// default alt+left/right), matching the word-by-word cursor movement most
 	// editors and terminals offer. home/end already work via LineStart/LineEnd.
