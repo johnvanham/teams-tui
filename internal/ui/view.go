@@ -719,6 +719,13 @@ func (m Model) statusLine() string {
 	if m.editingMsgID != "" {
 		left = "EDITING (enter to save · esc to cancel)"
 	}
+	if m.replyTo != nil {
+		who := m.replyTo.SenderName
+		if who == "" {
+			who = "message"
+		}
+		left = fmt.Sprintf("REPLYING TO %s (enter to send · esc to cancel)", who)
+	}
 	if len(m.pendingImage) > 0 {
 		left = fmt.Sprintf("IMAGE ATTACHED %s (enter to send · esc to discard)",
 			humanBytes(len(m.pendingImage)))
@@ -810,7 +817,7 @@ func (m *Model) renderConversation() {
 	// source of truth for the select/react/quote actions.
 	visible := ordered[:0:0]
 	for _, msg := range ordered {
-		text := msg.Body.PlainText()
+		text := msg.PlainText()
 		if msg.DeletedAt != nil {
 			text = "(message deleted)"
 		}
@@ -839,7 +846,7 @@ func (m *Model) renderConversation() {
 	var wrapCont []bool
 	line := 0
 	for i, msg := range m.convMsgs {
-		text := msg.Body.PlainText()
+		text := msg.PlainText()
 		if msg.DeletedAt != nil {
 			text = "(message deleted)"
 		}

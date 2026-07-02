@@ -29,7 +29,12 @@ func debugDumpMessages(msgs []Message) {
 	}
 	defer f.Close()
 	for _, m := range msgs {
-		fmt.Fprintf(f, "=== %s id=%s type=%q contentType=%q ===\n%s\n\n",
+		fmt.Fprintf(f, "=== %s id=%s type=%q contentType=%q ===\n%s\n",
 			time.Now().Format(time.RFC3339), m.ID, m.MessageType, m.Body.ContentType, m.Body.Content)
+		for _, a := range m.Attachments {
+			fmt.Fprintf(f, "--- attachment id=%s contentType=%q name=%q ---\n%s\n",
+				a.ID, a.ContentType, a.Name, a.Content)
+		}
+		fmt.Fprintln(f)
 	}
 }

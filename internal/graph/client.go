@@ -435,12 +435,27 @@ func (c *Client) SendMessage(ctx context.Context, chatID, text string) (*Message
 // the native client renders the highlight). With no mentions it behaves exactly
 // like SendMessage.
 func (c *Client) SendMessageWithMentions(ctx context.Context, chatID, text string, mentions []Mention) (*Message, error) {
+	return c.SendMessageReply(ctx, chatID, text, mentions, nil)
+}
+
+// SendMessageReply posts a message that optionally quotes an existing message as
+// a native Teams reply. When reply is non-nil, a messageReference attachment is
+// built (see Reply.referenceAttachment) and its <attachment> placeholder is
+// prepended to the body HTML, so the message renders as a quoted reply for every
+// participant and in the native client — matching how Teams stores replies —
+// rather than as an inline <blockquote>. With reply nil it behaves exactly like
+// SendMessageWithMentions.
+func (c *Client) SendMessageReply(ctx context.Context, chatID, text string, mentions []Mention, reply *Reply) (*Message, error) {
 	content, payloads := ComposeHTMLWithMentions(text, mentions)
-	payload := map[string]any{
-		"body": map[string]string{
-			"contentType": "html",
-			"content":     content,
-		},
+	payload := map[string]any{}
+	if reply != nil && reply.MessageID != "" {
+		prefix, attachment := reply.referenceAttachment()
+		content = prefix + content
+		payload["attachments"] = []map[string]any{attachment}
+	}
+	payload["body"] = map[string]string{
+		"contentType": "html",
+		"content":     content,
 	}
 	if len(payloads) > 0 {
 		payload["mentions"] = payloads

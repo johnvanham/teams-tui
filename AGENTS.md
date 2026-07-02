@@ -76,8 +76,20 @@ into a single `Update`. Never block in `Update` or `View`; do I/O in a `tea.Cmd`
 - `compose.go` — send side: `ComposeHTML` converts compose-box text (Markdown
   fences + inline `` `code` ``) to the `<pre><code>` HTML Teams stores, so code
   blocks and newlines render for every participant.
+- `quote.go` — reply/quote handling. Teams stores a reply as a
+  `messageReference` **attachment** (an empty `<attachment id="…">` in the body
+  plus an `attachments[]` entry whose `content` JSON holds the referenced
+  message id, a plaintext preview, and the sender) — *not* an inline
+  `<blockquote>`. `Message.PlainText()` resolves those references into the same
+  `"> "`-prefixed lines the rest of the app uses (so received replies render
+  like any other quote via `ui/view.go`'s `renderQuote`); `Reply` +
+  `Client.SendMessageReply` build the same attachment on the send side so our
+  replies match the native client. (The legacy `<blockquote>` receive/compose
+  path in `text.go`/`compose.go` is kept for older messages.)
 - `debug.go` — opt-in raw message-body dump gated by `TEAMS_TUI_DEBUG_BODIES`
-  (a file path); used to inspect exactly how Graph stores a message.
+  (a file path); dumps each message's raw body **and its attachments** (incl.
+  the `messageReference` JSON), used to inspect exactly how Graph stores a
+  message.
 
 The code-block fence convention (the literal ```` ``` ```` plus optional
 language) is shared between `graph/code.go` (parsing), `graph/compose.go`

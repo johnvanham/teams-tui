@@ -215,6 +215,11 @@ type Attachment struct {
 	ContentType string `json:"contentType"`
 	ContentURL  string `json:"contentUrl"`
 	Name        string `json:"name"`
+	// Content carries the attachment's inline payload. For a reply/quote
+	// (contentType "messageReference") it is a JSON string describing the
+	// referenced message (its id, a preview of the quoted text, and the
+	// sender); see Message.Quotes.
+	Content string `json:"content"`
 }
 
 // Reaction is a single reaction on a chat message.

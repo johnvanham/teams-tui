@@ -264,10 +264,11 @@ func loadOlderMessagesCmd(ctx context.Context, c *graph.Client, chatID, nextLink
 }
 
 // sendMessageCmd posts a message to a chat, attaching any @-mentions so Graph
-// notifies the mentioned participants.
-func sendMessageCmd(ctx context.Context, c *graph.Client, chatID, text string, mentions []graph.Mention) tea.Cmd {
+// notifies the mentioned participants. When reply is non-nil the message quotes
+// it as a native Teams reply (a messageReference attachment).
+func sendMessageCmd(ctx context.Context, c *graph.Client, chatID, text string, mentions []graph.Mention, reply *graph.Reply) tea.Cmd {
 	return func() tea.Msg {
-		if _, err := c.SendMessageWithMentions(ctx, chatID, text, mentions); err != nil {
+		if _, err := c.SendMessageReply(ctx, chatID, text, mentions, reply); err != nil {
 			return errMsg{err}
 		}
 		return sentMsg{chatID: chatID}

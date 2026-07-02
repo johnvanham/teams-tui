@@ -9,9 +9,11 @@ import (
 var (
 	tagRe        = regexp.MustCompile(`(?s)<[^>]*>`)
 	multiSpaceRe = regexp.MustCompile(`[ \t]{2,}`)
-	// blockquoteRe matches a <blockquote>…</blockquote> element (Teams stores
-	// quoted replies, and our own quote-replies, this way). Captured group 1 is
-	// the inner HTML, which quoteToLines converts to "> "-prefixed lines.
+	// blockquoteRe matches a <blockquote>…</blockquote> element. Native Teams
+	// replies now arrive as messageReference attachments (see quote.go), but
+	// older messages — and any client that inlines a quote — still use
+	// <blockquote>, so this receive path is kept. Captured group 1 is the inner
+	// HTML, which quoteToLines converts to "> "-prefixed lines.
 	blockquoteRe = regexp.MustCompile(`(?is)<blockquote\b[^>]*>(.*?)</blockquote\s*>`)
 )
 

@@ -122,6 +122,7 @@ type Model struct {
 	selCurCol    int      // display column under the mouse now
 	openingImage    bool                      // an image download/open is in flight
 	editingMsgID    string                    // message ID being edited ("" if composing new)
+	replyTo         *graph.Reply              // message being quoted as a native reply (nil = none)
 	pendingImage    []byte                    // image pasted from the clipboard, awaiting send
 	pendingImageCT  string                    // MIME type of pendingImage (e.g. "image/png")
 	focused         bool                      // terminal window has focus

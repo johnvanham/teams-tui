@@ -238,7 +238,7 @@ registration first if your tenant requires it.
 | `y` / `c`      | Copy the highlighted text selection to the system clipboard (Messages) |
 | `enter`        | Open selected chat (Chats) / send message (Compose) / start chat (Contacts) |
 | `r`            | React to the selected message (Messages): opens a searchable emoji picker; reacting with an emoji you already used removes it |
-| `q`            | Quote-reply (Messages): if text is highlighted, quotes just that selection; otherwise quotes the whole selected message. Prefills the composer with the quoted text |
+| `q`            | Quote-reply (Messages): starts a native Teams reply to the selected message (if text is highlighted, quotes just that selection as the preview). Shows a "Replying to …" indicator above the composer; type your reply and `enter` to send, `esc` to cancel |
 | `alt+enter`    | Insert a newline in the compose box      |
 | `:` + 2 chars  | Open the inline emoji picker while composing (`↑`/`↓` select, `tab`/`enter` insert, `esc` close) |
 | `ctrl+j`       | Open the full emoji browser while composing (mnemonic: emoJi): lists every emoji and filters as you type (`↑`/`↓` select, `enter` insert at cursor, `esc` close) |
@@ -249,7 +249,7 @@ registration first if your tenant requires it.
 | `ctrl+e`       | Edit a message: the selected message in the Messages pane if it's yours, otherwise your most recent message |
 | `ctrl+y` / click | Open an image in your default viewer/browser (`ctrl+y` = newest; click a placeholder for that one) |
 | `ctrl+v`       | Paste an image from the clipboard and attach it to the next message (type a caption, then `enter` to send; `esc` to discard) |
-| `esc`          | Clear the compose box (empties typed text, cancels an edit, discards a staged image) |
+| `esc`          | Clear the compose box (empties typed text, cancels an edit or reply, discards a staged image) |
 | `ctrl+r`       | Refresh now                              |
 | `ctrl+s`       | Open the status picker (set your presence) |
 | `ctrl+g`       | Toggle full help (`esc` also closes it)  |
@@ -284,10 +284,14 @@ and `ui/highlight.go` syntax-highlights the rendered block using a
 - Reading tokens is intentionally avoided in code; tokens are treated as opaque
   per Microsoft guidance.
 - Message history is fetched per chat on demand and refreshed on the poll tick.
-- Quote-replies round-trip through the same three places as code blocks: a
-  `> `-prefixed run in the composer becomes a `<blockquote>` (`graph/compose.go`),
-  any incoming `<blockquote>` is converted back to `> ` lines (`graph/text.go`),
-  and the renderer styles those lines with a left bar (`ui/view.go`).
+- Quote-replies use Teams' native format: pressing `q` starts a reply to the
+  selected message, which is sent as a `messageReference` attachment
+  (`graph/quote.go`, `Client.SendMessageReply`) — the same structure the desktop
+  client stores. Incoming replies (from any client) carry the quoted message as
+  a `messageReference` attachment too; `Message.PlainText()` resolves it into
+  `> Sender wrote:` / `> quoted text` lines, which the renderer styles with a
+  left bar (`ui/view.go`). Older messages sent as an inline `<blockquote>` are
+  still understood on the receive side (`graph/text.go`).
 - Chats with unread messages are shown in orange text in the sidebar (the
   selected chat keeps its pink highlight). Unread state comes from Graph's
   per-chat `viewpoint` read marker; opening a chat marks it read locally and on
@@ -298,8 +302,8 @@ and `ui/highlight.go` syntax-highlights the rendered block using a
   browsing, files, or app tabs.
 - Reactions are rendered and can be added/removed (`r` on a selected message,
   via `setReaction`/`unsetReaction`, covered by `Chat.ReadWrite`). Quote-replies
-  are sent as a `<blockquote>` and rendered with a left bar; Teams' native
-  threaded replies are not used.
+  are sent as a native Teams `messageReference` and rendered with a left bar, so
+  they show as a proper reply for every participant.
 - Images in messages are shown as placeholders (`🖼 [n] name`); press `ctrl+y`
   to open the newest one, or click a placeholder to open that specific image, in
   your OS default image viewer/browser (inline Graph hosted content is

@@ -758,6 +758,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// clipboard image, and dismisses the emoji popup.
 		if msg.String() == "esc" {
 			m.editingMsgID = ""
+			m.replyTo = nil
 			m.clearPendingImage()
 			m.compose.Reset()
 			m.closeEmojiPicker()
@@ -1818,6 +1819,7 @@ func (m Model) trySend() (tea.Model, tea.Cmd) {
 		m.clearMentions()
 		m.clearSpellCheck()
 		m.editingMsgID = ""
+		m.replyTo = nil
 		m.layout()
 		return m, sendImageCmd(m.ctx, m.client, chatID, img, ct, text)
 	}
@@ -1836,11 +1838,13 @@ func (m Model) trySend() (tea.Model, tea.Cmd) {
 		m.layout()
 		return m, editMessageCmd(m.ctx, m.client, chatID, msgID, text)
 	}
+	reply := m.replyTo
+	m.replyTo = nil
 	m.compose.Reset()
 	m.clearMentions()
 	m.clearSpellCheck()
 	m.layout() // shrink the compose box back immediately
-	return m, sendMessageCmd(m.ctx, m.client, chatID, text, mentions)
+	return m, sendMessageCmd(m.ctx, m.client, chatID, text, mentions, reply)
 }
 
 // startEdit loads one of the signed-in user's messages into the compose box for
@@ -2035,42 +2039,39 @@ func (m Model) applyReaction() (tea.Model, tea.Cmd) {
 	return m, reactCmd(m.ctx, m.client, chatID, msgID, glyph, remove)
 }
 
-// quoteSelected prefills the compose box with the selected message quoted as a
-// blockquote and moves focus to compose so the user can type their reply. The
-// "> "-prefixed lines round-trip through ComposeHTML into a <blockquote> on
-// send (see graph/compose.go).
+// quoteSelected enters reply mode for the selected message: it records the
+// message as m.replyTo (so trySend posts a native Teams messageReference
+// attachment) and focuses the composer so the user can type their reply. Unlike
+// the old inline-<blockquote> approach, the quoted text isn't prefilled into the
+// compose box; a "Replying to …" indicator is shown above it instead (see
+// viewReplyIndicator), matching how the native client stores and shows replies.
 func (m Model) quoteSelected() (tea.Model, tea.Cmd) {
 	sel, ok := m.selectedMessage()
 	if !ok {
 		return m, nil
 	}
-	// Prefer a mouse-highlighted sub-range: quote exactly what's selected.
-	// Otherwise fall back to quoting the whole message body.
-	text := sel.Body.PlainText()
+	// Prefer a mouse-highlighted sub-range as the quoted preview; otherwise
+	// quote the whole message body.
+	preview := sel.PlainText()
 	if sel.DeletedAt != nil {
-		text = "(message deleted)"
+		preview = "(message deleted)"
 	}
 	if snippet := strings.TrimRight(m.selectionText(), " \t"); snippet != "" {
-		text = snippet
+		preview = snippet
 	}
 	// Drop the selection now that it's been consumed so the highlight clears on
 	// the next render.
 	m.clearSelection()
-	var b strings.Builder
-	b.WriteString("> ")
-	b.WriteString(sel.SenderName())
-	b.WriteString(" wrote:\n")
-	for _, ln := range strings.Split(text, "\n") {
-		b.WriteString("> ")
-		b.WriteString(ln)
-		b.WriteString("\n")
+
+	reply := &graph.Reply{
+		MessageID:  sel.ID,
+		SenderName: sel.SenderName(),
+		Preview:    preview,
 	}
-	b.WriteString("\n") // blank line so the reply starts below the quote
-	// Preserve any half-typed reply by appending the quote prefix in front of it
-	// only when the composer is empty; otherwise prepend the quote.
-	existing := m.compose.Value()
-	m.compose.SetValue(b.String() + existing)
-	m.compose.MoveToEnd()
+	if sel.From != nil && sel.From.User != nil {
+		reply.SenderID = sel.From.User.ID
+	}
+	m.replyTo = reply
 	m.focus = focusCompose
 	m.layout()
 	return m, m.compose.Focus()
