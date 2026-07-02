@@ -238,7 +238,7 @@ registration first if your tenant requires it.
 | `y` / `c`      | Copy the highlighted text selection to the system clipboard (Messages) |
 | `enter`        | Open selected chat (Chats) / send message (Compose) / start chat (Contacts) |
 | `r`            | React to the selected message (Messages): opens a searchable emoji picker; reacting with an emoji you already used removes it |
-| `q`            | Quote-reply (Messages): starts a native Teams reply to the selected message (if text is highlighted, quotes just that selection as the preview). Shows a "Replying to …" indicator above the composer; type your reply and `enter` to send, `esc` to cancel |
+| `q`            | Quote-reply (Messages): with no text highlighted, starts a native Teams reply to the whole message (shows a preview banner above the composer; `enter` to send, `esc` to cancel). With text highlighted, prefills just that selection into the composer as a quote (sent as an inline quote block) |
 | `alt+enter`    | Insert a newline in the compose box      |
 | `:` + 2 chars  | Open the inline emoji picker while composing (`↑`/`↓` select, `tab`/`enter` insert, `esc` close) |
 | `ctrl+j`       | Open the full emoji browser while composing (mnemonic: emoJi): lists every emoji and filters as you type (`↑`/`↓` select, `enter` insert at cursor, `esc` close) |
@@ -284,14 +284,19 @@ and `ui/highlight.go` syntax-highlights the rendered block using a
 - Reading tokens is intentionally avoided in code; tokens are treated as opaque
   per Microsoft guidance.
 - Message history is fetched per chat on demand and refreshed on the poll tick.
-- Quote-replies use Teams' native format: pressing `q` starts a reply to the
-  selected message, which is sent as a `messageReference` attachment
+- Quote-replies default to Teams' native format: pressing `q` on a message
+  (with nothing highlighted) sends a `messageReference` attachment
   (`graph/quote.go`, `Client.SendMessageReply`) — the same structure the desktop
-  client stores. Incoming replies (from any client) carry the quoted message as
-  a `messageReference` attachment too; `Message.PlainText()` resolves it into
-  `> Sender wrote:` / `> quoted text` lines, which the renderer styles with a
-  left bar (`ui/view.go`). Older messages sent as an inline `<blockquote>` are
-  still understood on the receive side (`graph/text.go`).
+  client stores, so it shows as a real threaded reply. Incoming replies (from any
+  client) carry the quoted message as a `messageReference` attachment too;
+  `Message.PlainText()` resolves it into `> Sender wrote:` / `> quoted text`
+  lines, which the renderer styles with a left bar (`ui/view.go`).
+- The native format references a whole message by id, so it can't quote a
+  sub-range. When text is highlighted and you press `q`, the selection is instead
+  prefilled into the composer as `> `-prefixed lines and sent as an inline
+  `<blockquote>` (`graph/compose.go`) — quoted text in every client, just not a
+  threaded reply. Incoming/older `<blockquote>` quotes are understood on the
+  receive side too (`graph/text.go`).
 - Chats with unread messages are shown in orange text in the sidebar (the
   selected chat keeps its pink highlight). Unread state comes from Graph's
   per-chat `viewpoint` read marker; opening a chat marks it read locally and on

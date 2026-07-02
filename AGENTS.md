@@ -84,8 +84,13 @@ into a single `Update`. Never block in `Update` or `View`; do I/O in a `tea.Cmd`
   `"> "`-prefixed lines the rest of the app uses (so received replies render
   like any other quote via `ui/view.go`'s `renderQuote`); `Reply` +
   `Client.SendMessageReply` build the same attachment on the send side so our
-  replies match the native client. (The legacy `<blockquote>` receive/compose
-  path in `text.go`/`compose.go` is kept for older messages.)
+  replies match the native client. Because a `messageReference` references a
+  whole message by id, it can't quote a sub-range: `ui/update.go`'s
+  `quoteSelected` uses the native reply only for a whole-message quote and falls
+  back to the inline `<blockquote>` compose path (`prefillQuote` → `compose.go`)
+  when the user has highlighted a text selection. (That `<blockquote>`
+  receive/compose path in `text.go`/`compose.go` also still handles older
+  messages.)
 - `debug.go` — opt-in raw message-body dump gated by `TEAMS_TUI_DEBUG_BODIES`
   (a file path); dumps each message's raw body **and its attachments** (incl.
   the `messageReference` JSON), used to inspect exactly how Graph stores a

@@ -2039,30 +2039,39 @@ func (m Model) applyReaction() (tea.Model, tea.Cmd) {
 	return m, reactCmd(m.ctx, m.client, chatID, msgID, glyph, remove)
 }
 
-// quoteSelected enters reply mode for the selected message: it records the
-// message as m.replyTo (so trySend posts a native Teams messageReference
-// attachment) and focuses the composer so the user can type their reply. Unlike
-// the old inline-<blockquote> approach, the quoted text isn't prefilled into the
-// compose box; a "Replying to …" indicator is shown above it instead (see
-// viewReplyIndicator), matching how the native client stores and shows replies.
+// quoteSelected starts a quote-reply to the selected message and focuses the
+// composer. It has two modes, because Teams' native reply format references a
+// whole message by id and can't quote a sub-range:
+//
+//   - Whole-message quote (no text highlighted): records the message as
+//     m.replyTo so trySend posts a native Teams messageReference attachment
+//     (a real threaded reply). A preview banner is shown above the composer
+//     instead of prefilling text.
+//   - Sub-selection quote (text highlighted): the native format can't carry a
+//     partial quote, so the highlighted snippet is prefilled into the composer
+//     as "> "-prefixed lines, which round-trip into an inline <blockquote> on
+//     send (see graph/compose.go). This renders as quoted text in every client
+//     (just not as a threaded reply), preserving the "quote only my selection"
+//     behaviour.
 func (m Model) quoteSelected() (tea.Model, tea.Cmd) {
 	sel, ok := m.selectedMessage()
 	if !ok {
 		return m, nil
 	}
-	// Prefer a mouse-highlighted sub-range as the quoted preview; otherwise
-	// quote the whole message body.
+
+	// A mouse-highlighted sub-range takes the inline-blockquote path so only the
+	// selection is quoted.
+	if snippet := strings.TrimRight(m.selectionText(), " \t"); snippet != "" {
+		m.clearSelection()
+		return m.prefillQuote(sel.SenderName(), snippet)
+	}
+	m.clearSelection()
+
+	// Whole message: native Teams reply via a messageReference attachment.
 	preview := sel.PlainText()
 	if sel.DeletedAt != nil {
 		preview = "(message deleted)"
 	}
-	if snippet := strings.TrimRight(m.selectionText(), " \t"); snippet != "" {
-		preview = snippet
-	}
-	// Drop the selection now that it's been consumed so the highlight clears on
-	// the next render.
-	m.clearSelection()
-
 	reply := &graph.Reply{
 		MessageID:  sel.ID,
 		SenderName: sel.SenderName(),
@@ -2072,6 +2081,28 @@ func (m Model) quoteSelected() (tea.Model, tea.Cmd) {
 		reply.SenderID = sel.From.User.ID
 	}
 	m.replyTo = reply
+	m.focus = focusCompose
+	m.layout()
+	return m, m.compose.Focus()
+}
+
+// prefillQuote prepends a "> Sender wrote:" / "> text" block (plus a blank line)
+// to the compose box and focuses it, for the sub-selection quote path. The
+// "> "-prefixed lines become an inline <blockquote> on send (graph/compose.go).
+// Any half-typed reply is preserved after the quote.
+func (m Model) prefillQuote(sender, text string) (tea.Model, tea.Cmd) {
+	var b strings.Builder
+	b.WriteString("> ")
+	b.WriteString(sender)
+	b.WriteString(" wrote:\n")
+	for _, ln := range strings.Split(text, "\n") {
+		b.WriteString("> ")
+		b.WriteString(ln)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n") // blank line so the reply starts below the quote
+	m.compose.SetValue(b.String() + m.compose.Value())
+	m.compose.MoveToEnd()
 	m.focus = focusCompose
 	m.layout()
 	return m, m.compose.Focus()

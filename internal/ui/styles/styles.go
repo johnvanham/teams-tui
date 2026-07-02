@@ -199,6 +199,15 @@ var (
 				Background(Purple).
 				Bold(true)
 
+	// ReplyBar / ReplyLabel / ReplyText style the reply-preview banner shown
+	// above the compose box while replying to a message (q). The bar echoes the
+	// quoted-message left bar (QuoteBar) so the two read as the same concept;
+	// the label names the sender being replied to and the text is the quoted
+	// snippet.
+	ReplyBar   = lipgloss.NewStyle().Foreground(Purple)
+	ReplyLabel = lipgloss.NewStyle().Foreground(PurpleLt).Bold(true)
+	ReplyText  = lipgloss.NewStyle().Foreground(LightGrey).Italic(true)
+
 	// SpellLabel prefixes the spell-check strip under the compose box (e.g.
 	// "spelling:").
 	SpellLabel = lipgloss.NewStyle().Foreground(Grey)

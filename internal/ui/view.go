@@ -115,7 +115,7 @@ func (m *Model) layout() {
 	// plus the inline emoji popup's rows when it is open (it sits between the
 	// messages and the compose box, stealing height from the viewport), plus
 	// the spell-check strip below the compose box when it has misspellings.
-	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight() - m.reactPickerHeight() - m.emojiBrowserHeight() - m.mentionPickerHeight() - m.spellPickerHeight() - m.spellStripHeight()
+	vpInnerH := bodyHeight - composeBoxH - 2 - participantsHeaderRows - m.emojiPickerHeight() - m.reactPickerHeight() - m.emojiBrowserHeight() - m.mentionPickerHeight() - m.spellPickerHeight() - m.spellStripHeight() - m.replyBannerHeight()
 	if vpInnerH < 1 {
 		vpInnerH = 1
 	}
@@ -305,6 +305,11 @@ func (m Model) viewReady() string {
 	if m.spellPicker {
 		rightParts = append(rightParts, m.viewSpellPicker())
 	}
+	// Reply-preview banner sits directly above the compose box while replying,
+	// showing the sender and quoted snippet (or highlighted selection).
+	if m.replyBannerHeight() > 0 {
+		rightParts = append(rightParts, m.viewReplyBanner(boxW))
+	}
 	rightParts = append(rightParts, compose)
 	// Spell-check strip sits directly beneath the compose box, listing
 	// misspelled words + top suggestions (only when there are any).
@@ -441,6 +446,49 @@ func (m Model) emojiPickerHeight() int {
 		return 0
 	}
 	return len(m.emojiMatches) + 1 + 2 // rows + hint + top/bottom border
+}
+
+// replyBannerHeight returns the rows the reply-preview banner occupies above the
+// compose box (1 while replying to a message, else 0). layout() subtracts it
+// from the messages viewport so the vertical budget stays balanced.
+func (m Model) replyBannerHeight() int {
+	if m.replyTo == nil {
+		return 0
+	}
+	return 1
+}
+
+// viewReplyBanner renders a one-line preview of the message being replied to,
+// shown directly above the compose box while a reply is in progress, e.g.:
+//
+//	▌ Reply to Ada: sounds good, let's do that   esc to cancel
+//
+// The quoted text is the reply preview — which is the mouse-highlighted snippet
+// when the user selected one before pressing q, otherwise the whole message — so
+// it reflects exactly what will be quoted. It's flattened to a single line and
+// clamped to the available width with an ellipsis.
+func (m Model) viewReplyBanner(width int) string {
+	if m.replyTo == nil {
+		return ""
+	}
+	bar := styles.ReplyBar.Render("▌ ")
+	who := m.replyTo.SenderName
+	if who == "" {
+		who = "message"
+	}
+	label := styles.ReplyLabel.Render("Reply to " + who + ": ")
+	hint := "   " + styles.Hint.Render("esc to cancel")
+
+	// Collapse the (possibly multi-line) preview to one line so the banner
+	// stays a single row regardless of how much was quoted.
+	preview := strings.Join(strings.Fields(m.replyTo.Preview), " ")
+
+	avail := width - lipgloss.Width(bar) - lipgloss.Width(label) - lipgloss.Width(hint)
+	if avail < 1 {
+		avail = 1
+	}
+	preview = ansi.Truncate(preview, avail, "…")
+	return bar + label + styles.ReplyText.Render(preview) + hint
 }
 
 // spellStripHeight returns the rows the spell-check strip occupies (1 when
@@ -718,13 +766,6 @@ func (m Model) statusLine() string {
 	}
 	if m.editingMsgID != "" {
 		left = "EDITING (enter to save · esc to cancel)"
-	}
-	if m.replyTo != nil {
-		who := m.replyTo.SenderName
-		if who == "" {
-			who = "message"
-		}
-		left = fmt.Sprintf("REPLYING TO %s (enter to send · esc to cancel)", who)
 	}
 	if len(m.pendingImage) > 0 {
 		left = fmt.Sprintf("IMAGE ATTACHED %s (enter to send · esc to discard)",
