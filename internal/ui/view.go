@@ -23,7 +23,7 @@ const (
 	titleHeight            = 1
 	statusHeight           = 1
 	sidebarHeaderRows      = 1 // "Chats" header drawn inside the sidebar chrome
-	participantsHeaderRows = 1 // presence header above the conversation
+	participantsHeaderRows = 2 // presence header row + a blank spacer inside the messages pane
 	composeMinLines        = 1 // minimum visible rows in the compose box
 	scrollbarWidth         = 2 // scroll-indicator gutter: one spacer + one bar column
 )
@@ -256,16 +256,19 @@ func (m Model) viewReady() string {
 	sidebarInner := lipgloss.JoinVertical(lipgloss.Left, header, listView)
 	sidebar := sideStyle.Width(sidebarWidth).Render(sidebarInner)
 
-	// Participants header (names + presence) above the conversation.
-	participants := m.participantsHeader()
-
 	// The right column boxes are pinned to the remaining width so they align
-	// flush with the participants bar and fill the screen.
+	// flush and fill the screen.
 	rightW := m.width - sidebarWidth
 	if rightW < 3 {
 		rightW = 3
 	}
 	boxW := rightW // lipgloss .Width is the total rendered width incl. border
+
+	// Participants header (names + presence). It's the first row *inside* the
+	// messages pane (styled like the sidebar's "Chats" header) so the two
+	// columns line up. Its width matches the pane's inner width (border 2 +
+	// padding 2 = 4 cells subtracted).
+	participants := m.participantsHeader(boxW - 4)
 
 	// Messages pane. The viewport content sits left of a one-column scroll
 	// indicator gutter, so it's clear when we're not at the latest message.
@@ -278,7 +281,12 @@ func (m Model) viewReady() string {
 		m.viewport.View(),
 		m.scrollbar(m.viewport.Height()),
 	)
-	messages := msgStyle.Width(boxW).Render(msgInner)
+	// Stack the participants header, a blank spacer row, then the viewport, and
+	// wrap them all in the pane border. The spacer gives the title breathing
+	// room above the first message.
+	messages := msgStyle.Width(boxW).Render(
+		lipgloss.JoinVertical(lipgloss.Left, participants, "", msgInner),
+	)
 
 	// Compose box.
 	composeStyle := styles.ComposeBlurred
@@ -289,7 +297,7 @@ func (m Model) viewReady() string {
 
 	// The inline emoji popup sits directly above the compose box so it never
 	// covers the text being typed.
-	rightParts := []string{participants, messages}
+	rightParts := []string{messages}
 	if m.emojiPicker {
 		rightParts = append(rightParts, m.viewEmojiPicker())
 	}
@@ -335,23 +343,23 @@ func (m Model) viewReady() string {
 
 // participantsHeader renders a single line listing the other participants in
 // the current chat, each prefixed by a colored presence glyph and (for 1:1
-// chats) followed by their status label. The line is width-clamped to the
-// right column and truncated with an ellipsis if needed.
-func (m Model) participantsHeader() string {
-	rightW := m.width - sidebarWidth
-	if rightW < 1 {
-		rightW = 1
+// chats) followed by their status label. It's rendered as a header row inside
+// the messages pane (styled like the sidebar's "Chats" header) at the given
+// inner width, truncated with an ellipsis if it overflows.
+func (m Model) participantsHeader(innerW int) string {
+	if innerW < 1 {
+		innerW = 1
 	}
+	bg := styles.Purple
 	bar := styles.ParticipantsBar
 	chat, ok := m.chats[m.currentChat]
 	if !ok || m.currentChat == "" {
-		return bar.Width(rightW).Render("")
+		return bar.Width(innerW).Render("")
 	}
 
-	// All inner spans carry the bar's background so the row is one uniform
-	// colour. Generous spacing keeps it readable: a wide gap separates the
-	// title from the participants, and participants are separated by spaces.
-	bg := styles.ParticipantsBarBg
+	// Every inner span carries the header's purple background so the row is one
+	// uniform colour. Generous spacing keeps it readable: a wide gap separates
+	// the title from the participants, and participants are separated by spaces.
 	on := func(fg color.Color, s string) string {
 		return lipgloss.NewStyle().Background(bg).Foreground(fg).Render(s)
 	}
@@ -372,19 +380,19 @@ func (m Model) participantsHeader() string {
 		if name == "" {
 			continue
 		}
-		seg := m.presenceGlyph(mem.UserID, bg) + on(styles.LightGrey, " "+name)
+		seg := m.presenceGlyph(mem.UserID, bg) + on(styles.White, " "+name)
 		// Show the textual status next to the name for 1:1 chats (and any chat
 		// with a title, where there's room and no name duplication).
 		if oneOnOne || hasTitle {
 			if p, ok := m.presences[mem.UserID]; ok {
 				if label := p.Label(); label != "" {
-					seg += on(styles.Grey, " — "+label)
+					seg += on(styles.LightGrey, " — "+label)
 				}
 			}
 		}
 		parts = append(parts, seg)
 	}
-	participants := strings.Join(parts, on(styles.Grey, "    "))
+	participants := strings.Join(parts, on(styles.LightGrey, "    "))
 
 	// Build the line. With a real topic: bold title, wide gap, participants.
 	// Without one: just the participants (the title would only repeat names).
@@ -393,24 +401,24 @@ func (m Model) participantsHeader() string {
 		title := lipgloss.NewStyle().Background(bg).Foreground(styles.White).Bold(true).Render(chat.Topic)
 		body = title
 		if participants != "" {
-			body += on(styles.Grey, "     ") + participants
+			body += on(styles.LightGrey, "     ") + participants
 		}
 	} else {
 		body = participants
 	}
 
-	// Clamp to the available inner width (minus the bar's horizontal padding,
-	// which is 2 cells each side). ansi.Truncate is escape-aware so it never
-	// cuts mid-sequence (which was causing stray characters/background gaps).
-	avail := rightW - 4
+	// Clamp to the available inner width (minus the bar's 1-cell horizontal
+	// padding each side). ansi.Truncate is escape-aware so it never cuts
+	// mid-sequence (which was causing stray characters/background gaps).
+	avail := innerW - 2
 	if lipgloss.Width(body) > avail {
 		body = ansi.Truncate(body, avail, "…")
 	}
-	return bar.Width(rightW).Render(body)
+	return bar.Width(innerW).Render(body)
 }
 
 // presenceGlyph returns the colored presence indicator for a user, rendered on
-// the given background so it blends into the surrounding bar.
+// the given background so it blends into the surrounding header.
 func (m Model) presenceGlyph(userID string, bg color.Color) string {
 	p, ok := m.presences[userID]
 	glyph := "○"

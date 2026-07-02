@@ -290,14 +290,14 @@ func (m Model) delegateRows() int {
 
 // messagesContentTop is the screen Y of the first content row inside the
 // messages viewport. It mirrors the right-column geometry in viewReady():
-// title bar, optional banner, the participants header, then the pane's top
-// border.
+// title bar, optional banner, the pane's top border, then the participants
+// header row (which now sits inside the pane, above the viewport).
 func (m Model) messagesContentTop() int {
 	bannerRows := 0
 	if m.activeBanner() != "" {
 		bannerRows = 1
 	}
-	return titleHeight + bannerRows + participantsHeaderRows + 1 /*pane top border*/
+	return titleHeight + bannerRows + 1 /*pane top border*/ + participantsHeaderRows
 }
 
 // imageAtY maps a screen Y coordinate to the index of an image placeholder in

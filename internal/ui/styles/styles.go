@@ -82,14 +82,13 @@ var (
 			BorderForeground(Purple).
 			Padding(1, 2)
 
-	// ParticipantsBarBg is the background colour of the participants header bar.
-	ParticipantsBarBg = lipgloss.Color("#2A2A3D")
-
-	// ParticipantsBar shows chat participants and presence above the messages.
+	// ParticipantsBar shows chat participants and presence as a header row
+	// inside the messages pane, styled like the sidebar's "Chats" header
+	// (purple background, light text) so the two columns line up.
 	ParticipantsBar = lipgloss.NewStyle().
 			Foreground(White).
-			Background(ParticipantsBarBg).
-			Padding(0, 2)
+			Background(Purple).
+			Padding(0, 1)
 
 	// SenderName for a message author.
 	SenderName = lipgloss.NewStyle().Foreground(PurpleLt).Bold(true)
