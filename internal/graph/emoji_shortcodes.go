@@ -301,10 +301,6 @@ var shortcodeRe = regexp.MustCompile(`:([a-zA-Z0-9_+-]+):`)
 // emoticon.
 var emoticonKeys = sortedEmoticonKeys()
 
-// emoticonReplacer is built once from emoticonEmoji with the longest emoticons
-// first, so overlapping prefixes (":-)" vs ":)") resolve to the longer match.
-var emoticonReplacer = buildEmoticonReplacer()
-
 func sortedEmoticonKeys() []string {
 	keys := make([]string, 0, len(emoticonEmoji))
 	for k := range emoticonEmoji {
@@ -320,19 +316,68 @@ func sortedEmoticonKeys() []string {
 	return keys
 }
 
-func buildEmoticonReplacer() *strings.Replacer {
-	pairs := make([]string, 0, len(emoticonKeys)*2)
-	for _, k := range emoticonKeys {
-		pairs = append(pairs, k, emoticonEmoji[k])
-	}
-	return strings.NewReplacer(pairs...)
-}
-
 // ReplaceShortcodes converts emoji shortcodes (:name:) and text emoticons (:-))
 // in s to their Unicode characters. Unknown :name: tokens are left untouched so
-// non-emoji uses of colons (timestamps, ratios, URLs) survive. It is safe to
-// call on already-converted or emoji-free text.
+// non-emoji uses of colons (timestamps, ratios, URLs) survive. Text inside
+// fenced code blocks (``` … ```) and inline `code` spans is emitted verbatim so
+// pasted code (e.g. `'read:org',`) is never mangled. It is safe to call on
+// already-converted or emoji-free text.
 func ReplaceShortcodes(s string) string {
+	// Split on lines so we can skip fenced code blocks wholesale; the fence
+	// convention (a line beginning with ```) matches graph/code.go and
+	// graph/compose.go.
+	crlf := strings.ReplaceAll(s, "\r\n", "\n")
+	lines := strings.Split(strings.ReplaceAll(crlf, "\r", "\n"), "\n")
+	inFence := false
+	for i, line := range lines {
+		if strings.HasPrefix(line, codeFence) {
+			inFence = !inFence
+			continue // the fence marker line itself is left untouched
+		}
+		if inFence {
+			continue // code block body: leave verbatim
+		}
+		lines[i] = replaceLineShortcodes(line)
+	}
+	// Newlines are returned as \n; the compose paths normalize line endings
+	// themselves, so this is consistent with the rest of the pipeline.
+	return strings.Join(lines, "\n")
+}
+
+// replaceLineShortcodes converts shortcodes and emoticons on a single line,
+// skipping any inline `code` spans so backtick-quoted snippets are preserved.
+func replaceLineShortcodes(line string) string {
+	if !strings.ContainsRune(line, '`') {
+		return replaceOutsideCode(line)
+	}
+	var b strings.Builder
+	inCode := false
+	segStart := 0
+	for i, r := range line {
+		if r == '`' {
+			seg := line[segStart:i]
+			if inCode {
+				b.WriteString(seg) // inside `code`: verbatim
+			} else {
+				b.WriteString(replaceOutsideCode(seg))
+			}
+			b.WriteByte('`')
+			segStart = i + len("`")
+			inCode = !inCode
+		}
+	}
+	tail := line[segStart:]
+	if inCode {
+		b.WriteString(tail) // unterminated `code`: keep verbatim
+	} else {
+		b.WriteString(replaceOutsideCode(tail))
+	}
+	return b.String()
+}
+
+// replaceOutsideCode performs the actual shortcode + emoticon substitution on a
+// stretch of ordinary (non-code) text.
+func replaceOutsideCode(s string) string {
 	// :name: tokens first, only substituting known names.
 	s = shortcodeRe.ReplaceAllStringFunc(s, func(tok string) string {
 		name := normalizeShortcode(tok[1 : len(tok)-1])
@@ -341,8 +386,69 @@ func ReplaceShortcodes(s string) string {
 		}
 		return tok
 	})
-	// Then classic emoticons.
-	return emoticonReplacer.Replace(s)
+	// Then classic emoticons, but only on word boundaries so an emoticon that
+	// happens to appear inside a larger token (e.g. ":o" within "read:org") is
+	// left alone. This mirrors the inline as-you-type matchers.
+	return replaceEmoticons(s)
+}
+
+// replaceEmoticons swaps recognized ASCII emoticons for their glyphs, but only
+// when the emoticon stands on its own — preceded by the start of the string or
+// whitespace, and followed by the end of the string, whitespace, or trailing
+// punctuation. This prevents mangling substrings of words/identifiers/URLs such
+// as the ":o" inside "read:org" or the ":D" inside "3:Dozen". Longest emoticons
+// win (emoticonKeys is longest-first).
+func replaceEmoticons(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		matched := false
+		for _, k := range emoticonKeys {
+			if !strings.HasPrefix(s[i:], k) {
+				continue
+			}
+			// Left boundary: start of string or whitespace.
+			if i > 0 && !isASCIISpace(s[i-1]) {
+				continue
+			}
+			// Right boundary: end of string, whitespace, or non-word
+			// punctuation (so "hi :-)!" and "(:-))" still convert).
+			end := i + len(k)
+			if end < len(s) && !isEmoticonRightBoundary(s[end]) {
+				continue
+			}
+			b.WriteString(emoticonEmoji[k])
+			i = end
+			matched = true
+			break
+		}
+		if !matched {
+			b.WriteByte(s[i])
+			i++
+		}
+	}
+	return b.String()
+}
+
+// isASCIISpace reports whether c is an ASCII space, tab, or newline.
+func isASCIISpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n'
+}
+
+// isEmoticonRightBoundary reports whether c can legitimately follow an emoticon.
+// A following alphanumeric (or '_'/':') means the emoticon is really part of a
+// larger token, so it is not treated as an emoticon.
+func isEmoticonRightBoundary(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z':
+		return false
+	case c >= 'A' && c <= 'Z':
+		return false
+	case c >= '0' && c <= '9':
+		return false
+	case c == '_' || c == ':':
+		return false
+	}
+	return true
 }
 
 // MatchShortcodePrefix returns emoji whose shortcode name begins with prefix

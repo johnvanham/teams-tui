@@ -18,6 +18,17 @@ func TestReplaceShortcodes(t *testing.T) {
 		{"emoticon heart", "love <3", "love ❤️"},
 		{"no emoji", "plain text", "plain text"},
 		{"shortcode and emoticon", ":wave: :-)", "👋 🙂"},
+		// Emoticons must stand on a word boundary: a colon-emoticon buried
+		// inside an identifier/URL (the reported "read:org" -> "read😮rg" bug)
+		// must be left untouched.
+		{"emoticon inside identifier", "'read:org',", "'read:org',"},
+		{"emoticon inside url", "http://x", "http://x"},
+		{"emoticon followed by letter", "a:Dstuff", "a:Dstuff"},
+		{"emoticon with trailing punctuation converts", "yay :-)!", "yay 🙂!"},
+		{"emoticon inside fenced code block", "```\n'read:org',\n```", "```\n'read:org',\n```"},
+		{"prose around fenced code block", "hi :-)\n```\n:o:o\n```\nbye :-)", "hi 🙂\n```\n:o:o\n```\nbye 🙂"},
+		{"emoticon inside inline code", "use `read:org` here", "use `read:org` here"},
+		{"emoticon outside inline code still converts", "`x` :-)", "`x` 🙂"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
