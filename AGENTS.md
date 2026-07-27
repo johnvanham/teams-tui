@@ -52,6 +52,12 @@ into a single `Update`. Never block in `Update` or `View`; do I/O in a `tea.Cmd`
 ### Key UI files (`internal/ui/`)
 - `model.go` — root `Model` struct + `New` constructor. All state lives here.
 - `update.go` — `Update` event loop + `handleKey` keyboard dispatch.
+  `Model.currentChat` is the single source of truth for which chat the message
+  pane shows; the sidebar's highlight is just a row index owned by
+  `bubbles/list`. Chats sort by last activity, so any poll can reorder them —
+  `rebuildChatList` (and `openChat`) therefore re-derive the highlight from
+  `currentChat` via `selectChatInList`, which indexes `list.VisibleItems()`
+  (the filtered view), not `chatOrder`.
 - `view.go` — rendering + `layout()` geometry. Constants like `sidebarWidth`.
   Message bodies are rendered by `renderBody`, which splits prose from fenced
   code blocks and styles each (`renderCodeBlock` for blocks).

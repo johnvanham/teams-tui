@@ -1101,8 +1101,7 @@ func (m Model) handleOpenChatByID(msg openChatByIDMsg) (tea.Model, tea.Cmd) {
 	}
 	m.sidebarMode = sidebarChats
 	m.focus = focusMessages
-	m.selectChatInList(msg.chatID)
-	openCmd := m.openChat(msg.chatID)
+	openCmd := m.openChat(msg.chatID) // also moves the sidebar highlight
 	if _, known := m.chats[msg.chatID]; !known {
 		return m, tea.Batch(loadChatsCmd(m.ctx, m.client), openCmd)
 	}
@@ -1110,13 +1109,25 @@ func (m Model) handleOpenChatByID(msg openChatByIDMsg) (tea.Model, tea.Cmd) {
 }
 
 // selectChatInList moves the sidebar list's highlight to chatID so the opened
-// chat is also the selected row. No-op when the chat isn't in the current list.
+// chat is also the selected row.
+//
+// It scans the list's *visible* items rather than m.chatOrder because
+// list.Select takes an index into the filtered view, which diverges from the
+// full chat order as soon as a filter is applied. No-op when the chat isn't
+// currently visible (filtered out, or not in the list yet).
 func (m *Model) selectChatInList(chatID string) {
-	for i, id := range m.chatOrder {
-		if id == chatID {
-			m.list.Select(i)
-			return
+	if chatID == "" {
+		return
+	}
+	for i, it := range m.list.VisibleItems() {
+		c, ok := it.(chatItem)
+		if !ok || c.chat.ID != chatID {
+			continue
 		}
+		if m.list.Index() != i {
+			m.list.Select(i)
+		}
+		return
 	}
 }
 
@@ -1724,6 +1735,12 @@ func (m *Model) openChat(chatID string) tea.Cmd {
 		}
 	}
 	listCmd := m.rebuildChatList()
+	// Keep the sidebar highlight on the chat the message pane shows. This is a
+	// no-op for the common paths (clicking/arrowing a row already moved the
+	// highlight) but matters when the chat is opened programmatically — a
+	// clicked notification, a freshly created chat, or the auto-open of the
+	// first chat at startup.
+	m.selectChatInList(chatID)
 	m.renderConversation()
 	m.viewport.GotoBottom()
 	return tea.Batch(
@@ -1769,7 +1786,19 @@ func (m *Model) rebuildChatList() tea.Cmd {
 		return nil
 	}
 	m.chatsSig = newSig
-	return m.list.SetItems(items)
+	cmd := m.list.SetItems(items)
+	// SetItems keeps the cursor at the same numeric row, but the rows may have
+	// moved: chats are sorted by last activity, so a message in any other chat
+	// reshuffles the list and would leave the highlight on a different chat
+	// than the one the message pane shows. Re-derive the highlight from
+	// currentChat, which is the single source of truth for what's open.
+	//
+	// Skip this while the user is typing a filter: there the cursor is theirs
+	// to move and the open chat may not even be among the matches.
+	if m.list.FilterState() != list.Filtering {
+		m.selectChatInList(m.currentChat)
+	}
+	return cmd
 }
 
 // inOpenCodeBlock reports whether the compose buffer currently has an unclosed
