@@ -253,8 +253,28 @@ registration first if your tenant requires it.
 | `esc`          | Drop a compose-box text selection; otherwise clear the compose box (empties typed text, cancels an edit or reply, discards a staged image) |
 | `ctrl+r`       | Refresh now                              |
 | `ctrl+s`       | Open the status picker (set your presence) |
-| `ctrl+g`       | Toggle full help (`esc` also closes it)  |
+| `ctrl+g`       | Toggle full help (`esc` also closes it): all key bindings, plus a legend for the sidebar's symbols |
 | `ctrl+c`       | Quit (see above: copies first when compose text is highlighted) |
+
+## Sidebar symbols
+
+The expanded help (`ctrl+g`) ends with this legend, so you don't have to come
+back here for it.
+
+| Symbol | Meaning |
+| ------ | ------- |
+| `[>]`  | One-to-one chat |
+| `[#]`  | Group chat |
+| `[@]`  | Meeting chat |
+| bold orange row | Chat with unread messages |
+| `●` green | Available |
+| `●` red | Busy, in a call, in a meeting, or presenting |
+| `⊘` red | Do not disturb / focusing |
+| `◐` amber | Away, be right back, or out of office |
+| `○` grey | Offline or unknown |
+
+The presence dots appear on rows in Contacts mode (`ctrl+o`), in the
+conversation header, and next to your own status in the footer.
 
 ## Architecture
 

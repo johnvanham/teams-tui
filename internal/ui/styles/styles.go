@@ -142,6 +142,12 @@ var (
 	// Hint is dim helper text.
 	Hint = lipgloss.NewStyle().Foreground(Grey)
 
+	// LegendLabel names a row of the symbol legend shown with the expanded
+	// help ("Chats", "People"); LegendGlyph renders a marker the way the
+	// sidebar does, so the legend reads as a sample of the real thing.
+	LegendLabel = lipgloss.NewStyle().Foreground(LightGrey).Bold(true)
+	LegendGlyph = lipgloss.NewStyle().Foreground(White)
+
 	// UnreadTitle / UnreadDesc colour a chat row with unread messages in the
 	// orange accent so it stands out from already-read chats. They mirror the
 	// default delegate's normal title/description layout (left padding) so the

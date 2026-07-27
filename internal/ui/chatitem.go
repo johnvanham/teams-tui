@@ -30,21 +30,26 @@ func newChatItem(c graph.Chat, selfID string, unread bool) chatItem {
 	return chatItem{chat: c, selfID: selfID, preview: preview, unread: unread}
 }
 
+// chatTypeGlyph returns the marker a chat row leads with, identifying the kind
+// of chat. The symbol legend under the expanded help (legend.go) reads these
+// from here so the two can't drift apart.
+func chatTypeGlyph(t graph.ChatType) string {
+	switch t {
+	case graph.ChatGroup:
+		return "[#]"
+	case graph.ChatMeeting:
+		return "[@]"
+	default:
+		return "[>]"
+	}
+}
+
 // Title implements list.DefaultItem. It leads with a type glyph followed by the
 // chat's display name. Unread chats are highlighted by the chat delegate via a
 // row background (see chatdelegate.go), not by any title marker, so titles stay
 // aligned whether or not a chat is unread.
 func (i chatItem) Title() string {
-	prefix := ""
-	switch i.chat.ChatType {
-	case graph.ChatGroup:
-		prefix = "[#] "
-	case graph.ChatMeeting:
-		prefix = "[@] "
-	default:
-		prefix = "[>] "
-	}
-	return prefix + i.chat.DisplayName(i.selfID)
+	return chatTypeGlyph(i.chat.ChatType) + " " + i.chat.DisplayName(i.selfID)
 }
 
 // Description implements list.DefaultItem.

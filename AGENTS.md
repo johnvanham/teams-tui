@@ -86,6 +86,13 @@ into a single `Update`. Never block in `Update` or `View`; do I/O in a `tea.Cmd`
   every path that rewrites the box.
 - `commands.go` — `tea.Cmd` constructors and the message types they return.
 - `keys.go` — `keyMap` keybinding definitions + help text.
+- `legend.go` — the symbol legend under the expanded help (what the sidebar's
+  `[>]`/`[#]`/`[@]` prefixes, unread colour and presence dots mean). It builds
+  entries from the renderers themselves (`chatTypeGlyph`, `graph.Presence.Glyph`,
+  `presenceColor`) rather than repeating their literals, packs them to the
+  terminal width, and reports `legendHeight()` so `layout()` can budget the rows.
+  Adding a sidebar marker means adding it here — `legend_test.go` checks the
+  known ones are all covered.
 - `chatitem.go`, `statusitem.go` — `list.Item` adapters.
 
 ### Graph client (`internal/graph/`)

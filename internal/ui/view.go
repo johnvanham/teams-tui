@@ -66,8 +66,8 @@ func (m *Model) layout() {
 		bannerHeight = 1
 	}
 
-	// Vertical budget: title + (banner) + body + status + help.
-	bodyHeight := m.height - titleHeight - statusHeight - helpHeight - bannerHeight
+	// Vertical budget: title + (banner) + body + status + help + legend.
+	bodyHeight := m.height - titleHeight - statusHeight - helpHeight - bannerHeight - m.legendHeight()
 	if bodyHeight < 3 {
 		bodyHeight = 3
 	}
@@ -335,10 +335,15 @@ func (m Model) viewReady() string {
 	}
 	parts = append(parts, body)
 
-	// Status + help.
+	// Status + help. The expanded help also gets the symbol legend beneath it,
+	// explaining the sidebar's markers.
 	status := m.statusLine()
 	parts = append(parts, status)
 	parts = append(parts, m.help.View(m.keys))
+	if legend := m.legendRows(); len(legend) > 0 {
+		parts = append(parts, "")
+		parts = append(parts, legend...)
+	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
