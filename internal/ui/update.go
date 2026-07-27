@@ -353,11 +353,13 @@ func (m Model) withinSidebar(x int) bool {
 
 // composeTop is the screen Y of the compose box's top border. Below the
 // participants header sits the messages viewport (its content height plus its
-// top/bottom borders), then any open emoji/reaction picker, then the compose
+// top/bottom borders), then any open picker and the reply banner (all of which
+// viewReady stacks between the messages and the compose box), then the compose
 // box. A click at or below this row lands on the compose box.
 func (m Model) composeTop() int {
 	return m.messagesContentTop() + m.viewport.Height() + 1 /*viewport bottom border*/ +
-		m.emojiPickerHeight() + m.reactPickerHeight() + m.emojiBrowserHeight() + m.mentionPickerHeight()
+		m.emojiPickerHeight() + m.reactPickerHeight() + m.emojiBrowserHeight() +
+		m.mentionPickerHeight() + m.spellPickerHeight() + m.replyBannerHeight()
 }
 
 // withinCompose reports whether a screen Y coordinate falls on the compose box
@@ -373,11 +375,13 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	}
 	if !m.withinSidebar(msg.X) {
 		if msg.X >= sidebarWidth {
-			// A click on the compose box focuses it so the user can type.
+			// A click on the compose box focuses it so the user can type,
+			// and moves the caret to the clicked character.
 			if m.withinCompose(msg.Y) {
 				m.focus = focusCompose
 				m.clearSelection()     // drop any mouse text selection
 				m.renderConversation() // drop the messages-pane selection highlight
+				m.moveComposeCursorTo(msg.X, msg.Y)
 				return m, m.compose.Focus()
 			}
 			// A click directly on an image placeholder opens that image.
