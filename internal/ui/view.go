@@ -293,7 +293,9 @@ func (m Model) viewReady() string {
 	if m.focus == focusCompose {
 		composeStyle = styles.ComposeFocused
 	}
-	compose := composeStyle.Width(boxW).Render(m.compose.View())
+	// The textarea has no notion of a selection, so the highlight for a
+	// mouse-dragged one is painted over its rendered view.
+	compose := composeStyle.Width(boxW).Render(m.applyComposeHighlight(m.compose.View()))
 
 	// The inline emoji popup sits directly above the compose box so it never
 	// covers the text being typed.

@@ -233,9 +233,10 @@ registration first if your tenant requires it.
 | -------------- | ---------------------------------------- |
 | `tab` / `shift+tab` | Move focus between Chats / Messages / Compose |
 | `↑`/`↓` `j`/`k`| Navigate the focused pane; in Messages, move the message selection |
-| click          | Select the clicked message (Messages); click the compose box to focus it |
-| click + drag   | Highlight text in the Messages pane (drag over the text you want to select) |
+| click          | Select the clicked message (Messages); click the compose box to focus it and put the cursor on the clicked character |
+| click + drag   | Highlight text in the Messages pane or the compose box (drag over the text you want to select) |
 | `y` / `c`      | Copy the highlighted text selection to the system clipboard (Messages) |
+| `ctrl+c`       | Copy the highlighted compose-box selection to the system clipboard; with nothing highlighted, quits |
 | `enter`        | Open selected chat (Chats) / send message (Compose) / start chat (Contacts) |
 | `r`            | React to the selected message (Messages): opens a searchable emoji picker; reacting with an emoji you already used removes it |
 | `q`            | Quote-reply (Messages): with no text highlighted, starts a native Teams reply to the whole message (shows a preview banner above the composer; `enter` to send, `esc` to cancel). With text highlighted, prefills just that selection into the composer as a quote (sent as an inline quote block) |
@@ -249,11 +250,11 @@ registration first if your tenant requires it.
 | `ctrl+e`       | Edit a message: the selected message in the Messages pane if it's yours, otherwise your most recent message |
 | `ctrl+y` / click | Open an image in your default viewer/browser (`ctrl+y` = newest; click a placeholder for that one) |
 | `ctrl+v`       | Paste an image from the clipboard and attach it to the next message (type a caption, then `enter` to send; `esc` to discard) |
-| `esc`          | Clear the compose box (empties typed text, cancels an edit or reply, discards a staged image) |
+| `esc`          | Drop a compose-box text selection; otherwise clear the compose box (empties typed text, cancels an edit or reply, discards a staged image) |
 | `ctrl+r`       | Refresh now                              |
 | `ctrl+s`       | Open the status picker (set your presence) |
 | `ctrl+g`       | Toggle full help (`esc` also closes it)  |
-| `ctrl+c`       | Quit                                     |
+| `ctrl+c`       | Quit (see above: copies first when compose text is highlighted) |
 
 ## Architecture
 
@@ -320,6 +321,10 @@ and `ui/highlight.go` syntax-highlights the rendered block using a
   Linux, `pbcopy` on macOS, and `clip` on Windows. (The app captures the mouse
   for its own selection; to fall back to your terminal's native selection, hold
   the modifier your terminal uses to bypass app mouse reporting — often `shift`.)
+- The compose box takes the mouse too: click to put the cursor on a character,
+  or click-and-drag to highlight text. `ctrl+c` copies the highlight (and only
+  quits when nothing is highlighted), and typing, pasting or `backspace`/`delete`
+  replaces it, as in any editor. `esc` drops the highlight.
 - You can paste an image from the clipboard with `ctrl+v` to send it inline.
   This shells out to a platform clipboard helper, so the relevant tool must be
   installed: `wl-paste` (Wayland) or `xclip` (X11) on Linux, `osascript` on

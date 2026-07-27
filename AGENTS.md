@@ -65,6 +65,25 @@ into a single `Update`. Never block in `Update` or `View`; do I/O in a `tea.Cmd`
   lexer from the fence language (or content analysis) and colours tokens from the
   configured chroma `*chroma.Style`, which is resolved once in `New` and stored
   on `Model.codeStyle`.
+- `selection.go` — mouse text selection over the messages viewport (drag to
+  highlight, `y`/`c` to copy, `q` to quote), working on the rendered
+  `Model.selContent` in (content line, display column) coordinates.
+- `composeclick.go` — mouse ↔ textarea coordinate bridge. bubbles' textarea has
+  no mouse support and keeps its soft-wrapping private, so `composeScan` walks
+  the caret over the box's visible display rows once (`MoveToBegin` +
+  `CursorDown`, reading `LineInfo`) and records what each row shows
+  (`composeRow`: logical line + rune range). Everything mouse-driven in the
+  compose box is built on that map. The walk deliberately runs down to the last
+  visible row before stepping back up, because that is what restores the
+  textarea's scroll offset (it only ever scrolls far enough to keep the caret on
+  screen, and there is no public offset setter).
+- `composesel.go` — mouse text selection *inside* the compose box: drag to
+  highlight, `ctrl+c` to copy, type/paste/`backspace` to replace. The textarea
+  has no selection concept, so the highlight is painted over its rendered view
+  (`applyComposeHighlight`) and replacement splices `SetValue`. Endpoints are
+  box-relative screen cells; `hasComposeSelection` invalidates them whenever the
+  compose text or focus changes, which saves clearing the selection by hand in
+  every path that rewrites the box.
 - `commands.go` — `tea.Cmd` constructors and the message types they return.
 - `keys.go` — `keyMap` keybinding definitions + help text.
 - `chatitem.go`, `statusitem.go` — `list.Item` adapters.

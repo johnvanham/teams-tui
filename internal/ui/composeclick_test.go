@@ -25,14 +25,21 @@ func composeModel(width, maxHeight int, value string) Model {
 	ta.MaxHeight = maxHeight
 	ta.SetWidth(width)
 	ta.SetValue(value)
+	ta.Focus()
 
-	return Model{phase: phaseReady, viewport: vp, compose: ta}
+	return Model{
+		phase:    phaseReady,
+		focus:    focusCompose,
+		keys:     defaultKeyMap(),
+		viewport: vp,
+		compose:  ta,
+	}
 }
 
 // clickCompose clicks the given text row/display column of the compose box and
 // returns the resulting cursor position.
 func clickCompose(m Model, row, col int) (line, column int) {
-	m.moveComposeCursorTo(m.composeTextLeft()+col, m.composeTextTop()+row)
+	m.moveComposeCursorTo(m.composeCellAt(m.composeTextLeft()+col, m.composeTextTop()+row))
 	return m.compose.Line(), m.compose.Column()
 }
 
@@ -99,7 +106,7 @@ func TestComposeClickKeepsScroll(t *testing.T) {
 		t.Fatalf("test setup: expected a scrolled compose box, got offset 0")
 	}
 	// Click the first visible row, which is line (before) of the content.
-	m.moveComposeCursorTo(m.composeTextLeft()+1, m.composeTextTop())
+	m.moveComposeCursorTo(m.composeCellAt(m.composeTextLeft()+1, m.composeTextTop()))
 	if got := m.compose.ScrollYOffset(); got != before {
 		t.Errorf("scroll offset = %d, want %d (unchanged)", got, before)
 	}

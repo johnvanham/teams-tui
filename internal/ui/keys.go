@@ -86,7 +86,9 @@ func defaultKeyMap() keyMap {
 		),
 		// y/c copy a mouse-highlighted text selection in the messages pane to
 		// the OS clipboard. (Only active while text is selected; the keys
-		// otherwise fall through.)
+		// otherwise fall through.) The compose box can't use them — they'd
+		// type — so a selection there is copied with ctrl+c, which falls back
+		// to Quit when nothing is highlighted.
 		Copy: key.NewBinding(
 			key.WithKeys("y"),
 			key.WithHelp("drag+y", "copy selection"),
@@ -109,7 +111,7 @@ func defaultKeyMap() keyMap {
 		),
 		Quit: key.NewBinding(
 			key.WithKeys("ctrl+c"),
-			key.WithHelp("ctrl+c", "quit"),
+			key.WithHelp("ctrl+c", "quit/copy"),
 		),
 	}
 }

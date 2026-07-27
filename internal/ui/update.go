@@ -38,6 +38,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
+	case tea.PasteMsg:
+		return m.handlePaste(msg)
+
 	case tea.MouseClickMsg:
 		return m.handleMouseClick(msg)
 
@@ -368,20 +371,44 @@ func (m Model) withinCompose(y int) bool {
 	return y >= m.composeTop()
 }
 
+// handlePaste inserts bracketed-paste text (ctrl+shift+v and friends, which the
+// terminal delivers as one message) into the compose box, replacing any
+// mouse-highlighted selection. It runs the same post-edit bookkeeping as typing
+// so the box grows to fit and the spell check re-runs. Note this is text paste;
+// ctrl+v stages an *image* from the clipboard and is handled in handleKey.
+func (m Model) handlePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
+	if m.phase != phaseReady || m.focus != focusCompose {
+		// Not composing: let the components have it (the chat list's filter
+		// input takes pasted text too).
+		return m.updateComponents(msg)
+	}
+	m.deleteComposeSelection()
+	var cmd tea.Cmd
+	m.compose, cmd = m.compose.Update(msg)
+	m.refreshEmojiPicker()
+	m.refreshMentionPicker()
+	m.layout()
+	return m, tea.Batch(cmd, m.scheduleSpellCheck())
+}
+
 // handleMouseClick activates the clicked chat and jumps focus to compose.
 func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if m.phase != phaseReady || msg.Button != tea.MouseLeft {
 		return m, nil
 	}
+	// Any click ends a held compose selection; clicking back into the compose
+	// box starts a fresh one below.
+	m.clearComposeSelection()
 	if !m.withinSidebar(msg.X) {
 		if msg.X >= sidebarWidth {
 			// A click on the compose box focuses it so the user can type,
-			// and moves the caret to the clicked character.
+			// moves the caret to the clicked character, and anchors a text
+			// selection there (a subsequent drag grows it).
 			if m.withinCompose(msg.Y) {
 				m.focus = focusCompose
-				m.clearSelection()     // drop any mouse text selection
-				m.renderConversation() // drop the messages-pane selection highlight
-				m.moveComposeCursorTo(msg.X, msg.Y)
+				m.clearSelection()     // drop any messages-pane text selection
+				m.renderConversation() // drop its highlight
+				m.startComposeSelection(msg.X, msg.Y)
 				return m, m.compose.Focus()
 			}
 			// A click directly on an image placeholder opens that image.
@@ -436,11 +463,21 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 
 // handleMouseMotion extends an in-progress text selection as the user drags the
 // mouse with the button held. It only acts while a selection was started on a
-// left-button press in the messages pane (m.selecting); other motion is
-// ignored. The cursor endpoint follows the pointer and the conversation is
-// re-rendered so the highlight tracks the drag.
+// left-button press in the messages pane (m.selecting) or the compose box
+// (m.composeSelecting); other motion is ignored. The cursor endpoint follows
+// the pointer and the conversation is re-rendered so the highlight tracks the
+// drag.
 func (m Model) handleMouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
-	if m.phase != phaseReady || !m.selecting {
+	if m.phase != phaseReady {
+		return m, nil
+	}
+	if m.composeSelecting {
+		// The compose highlight is drawn straight over the textarea's view, so
+		// there's nothing to re-render here.
+		m.extendComposeSelection(msg.X, msg.Y)
+		return m, nil
+	}
+	if !m.selecting {
 		return m, nil
 	}
 	pt, ok := m.selectionAt(msg.X, msg.Y)
@@ -456,7 +493,16 @@ func (m Model) handleMouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
 // anchor is kept (so y/q can act on it); a plain click that never moved clears
 // the selection state so no stale highlight lingers.
 func (m Model) handleMouseRelease(msg tea.MouseReleaseMsg) (tea.Model, tea.Cmd) {
-	if m.phase != phaseReady || !m.selecting {
+	if m.phase != phaseReady {
+		return m, nil
+	}
+	if m.composeSelecting {
+		if !m.hasComposeSelection() {
+			m.clearComposeSelection()
+		}
+		return m, nil
+	}
+	if !m.selecting {
 		return m, nil
 	}
 	if !m.hasSelection() {
@@ -536,6 +582,16 @@ func (m Model) handleStatusPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// ctrl+c copies a mouse-highlighted compose selection instead of quitting.
+	// The compose box can't use the messages pane's y/c (they'd type), and
+	// ctrl+c is what every other editor uses. It clears the selection as it
+	// copies, so pressing it again still quits.
+	if key.Matches(msg, m.keys.Quit) && m.hasComposeSelection() {
+		text := m.composeSelectionText()
+		m.clearComposeSelection()
+		return m, copyTextCmd(text)
+	}
+
 	// Global quit always available. Best-effort: end our presence session so we
 	// don't leave a stale status lingering (it would otherwise expire on its
 	// own after sessionExpiry).
@@ -759,8 +815,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.focus == focusCompose {
 		// Esc clears the compose box: it empties any typed text, exits an
 		// in-progress edit (restoring the new-message state), discards a staged
-		// clipboard image, and dismisses the emoji popup.
+		// clipboard image, and dismisses the emoji popup. A held text selection
+		// is the more immediate thing to undo, so Esc drops that first.
 		if msg.String() == "esc" {
+			if m.hasComposeSelection() {
+				m.clearComposeSelection()
+				return m, nil
+			}
 			m.editingMsgID = ""
 			m.replyTo = nil
 			m.clearPendingImage()
@@ -771,6 +832,27 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.clearSpellCheck()
 			m.layout()
 			return m, nil
+		}
+		// A mouse-highlighted selection behaves as it would in any editor:
+		// typing over it, pasting over it or deleting replaces it, while
+		// navigation keys merely drop it.
+		if m.hasComposeSelection() {
+			switch {
+			case msg.String() == "backspace" || msg.String() == "delete":
+				// Removing the selection *is* the edit; don't also forward the
+				// key, or it would eat the character next to it too.
+				m.deleteComposeSelection()
+				m.refreshEmojiPicker()
+				m.refreshMentionPicker()
+				m.layout()
+				return m, m.scheduleSpellCheck()
+			case msg.Text != "", key.Matches(msg, m.keys.Newline):
+				// Drop the selected text, then let the keystroke below insert
+				// at the caret we just left in its place.
+				m.deleteComposeSelection()
+			default:
+				m.clearComposeSelection()
+			}
 		}
 		if key.Matches(msg, m.keys.Send) {
 			// While the cursor sits inside an unclosed ``` code fence, Enter

@@ -120,16 +120,26 @@ type Model struct {
 	selAnchorCol int      // display column where the drag started
 	selCurLn     int      // content line under the mouse now
 	selCurCol    int      // display column under the mouse now
-	openingImage    bool                      // an image download/open is in flight
-	editingMsgID    string                    // message ID being edited ("" if composing new)
-	replyTo         *graph.Reply              // message being quoted as a native reply (nil = none)
-	pendingImage    []byte                    // image pasted from the clipboard, awaiting send
-	pendingImageCT  string                    // MIME type of pendingImage (e.g. "image/png")
-	focused         bool                      // terminal window has focus
-	myPresence      *graph.Presence           // signed-in user's own presence
-	sessionID       string                    // app presence session ID (client ID)
-	showStatus      bool                      // status-picker overlay visible
-	chosenStatus    *graph.PresenceOption     // status explicitly set by the user
+
+	// Mouse text selection inside the compose box (see composesel.go). Unlike
+	// the messages selection above, endpoints are (visible display row, display
+	// column) within the box: a compose selection can't outlive the text under
+	// it, since every edit and caret move clears it.
+	composeSelecting bool     // a compose selection is in progress or held
+	composeAnchor    selPoint // box row/column where the drag started
+	composeCur       selPoint // box row/column under the mouse now
+	composeSelValue  string   // compose text the selection was taken against
+
+	openingImage   bool                  // an image download/open is in flight
+	editingMsgID   string                // message ID being edited ("" if composing new)
+	replyTo        *graph.Reply          // message being quoted as a native reply (nil = none)
+	pendingImage   []byte                // image pasted from the clipboard, awaiting send
+	pendingImageCT string                // MIME type of pendingImage (e.g. "image/png")
+	focused        bool                  // terminal window has focus
+	myPresence     *graph.Presence       // signed-in user's own presence
+	sessionID      string                // app presence session ID (client ID)
+	showStatus     bool                  // status-picker overlay visible
+	chosenStatus   *graph.PresenceOption // status explicitly set by the user
 
 	// Inline emoji autocomplete (triggered by ":" + >=2 chars in the composer).
 	emojiPicker  bool                   // popup currently shown
