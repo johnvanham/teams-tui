@@ -146,11 +146,7 @@ func (m *Model) applyEmojiSelection() bool {
 	// Place the cursor immediately after the inserted glyph. SetValue resets
 	// the cursor to the end of the buffer, so walk it back to the right row,
 	// then set the column (colon position + the glyph's rune width).
-	m.compose.MoveToBegin()
-	for i := 0; i < row; i++ {
-		m.compose.CursorDown()
-	}
-	m.compose.SetCursorColumn(colonCol + len([]rune(glyph)))
+	m.setComposeCursor(row, colonCol+len([]rune(glyph)))
 	m.closeEmojiPicker()
 	return true
 }
@@ -222,12 +218,8 @@ func (m *Model) replaceColonEmoticonBeforeCursor() {
 	lines[row] = newLine
 	m.compose.SetValue(strings.Join(lines, "\n"))
 
-	m.compose.MoveToBegin()
-	for i := 0; i < row; i++ {
-		m.compose.CursorDown()
-	}
 	// Cursor goes after the glyph + the preserved boundary character.
-	m.compose.SetCursorColumn(startCol + len([]rune(glyph)) + 1)
+	m.setComposeCursor(row, startCol+len([]rune(glyph))+1)
 }
 
 // spliceEmoticon replaces the matched emoticon ending at col on the current line
@@ -250,9 +242,5 @@ func (m *Model) spliceEmoticon(before string, col int, runes []rune, glyph strin
 
 	// SetValue parks the cursor at the buffer end; walk it back to just after
 	// the inserted glyph.
-	m.compose.MoveToBegin()
-	for i := 0; i < row; i++ {
-		m.compose.CursorDown()
-	}
-	m.compose.SetCursorColumn(startCol + len([]rune(glyph)))
+	m.setComposeCursor(row, startCol+len([]rune(glyph)))
 }

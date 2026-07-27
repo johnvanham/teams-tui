@@ -203,11 +203,7 @@ func (m *Model) applyMentionSelection() bool {
 
 	// Reposition the cursor right after the inserted text (SetValue parks it at
 	// the buffer end).
-	m.compose.MoveToBegin()
-	for i := 0; i < row; i++ {
-		m.compose.CursorDown()
-	}
-	m.compose.SetCursorColumn(atCol + len([]rune(insert)))
+	m.setComposeCursor(row, atCol+len([]rune(insert)))
 
 	m.recordMention(mem)
 	m.closeMentionPicker()

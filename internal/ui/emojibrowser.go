@@ -105,11 +105,7 @@ func (m *Model) applyBrowserSelection() bool {
 
 	// SetValue parks the cursor at the buffer end; walk it back to just after
 	// the inserted glyph.
-	m.compose.MoveToBegin()
-	for i := 0; i < row; i++ {
-		m.compose.CursorDown()
-	}
-	m.compose.SetCursorColumn(col + len([]rune(glyph)))
+	m.setComposeCursor(row, col+len([]rune(glyph)))
 	m.closeEmojiBrowser()
 	return true
 }

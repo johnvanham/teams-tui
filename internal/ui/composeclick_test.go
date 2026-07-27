@@ -128,3 +128,38 @@ func TestComposeTopIncludesStackedRows(t *testing.T) {
 		t.Errorf("reply banner moved composeTop by %d, want %d", delta, m.replyBannerHeight())
 	}
 }
+
+// TestSetComposeCursorWrapped checks the caret lands on the requested *logical*
+// line even when earlier lines soft-wrap over several display rows. The
+// textarea can only step display rows, so a naive "CursorDown() row times"
+// walk lands short — this is what setComposeCursor exists to get right.
+func TestSetComposeCursorWrapped(t *testing.T) {
+	// At width 10 the first line wraps over two display rows.
+	m := composeModel(10, 10, "aaaa bbbb cccc\nsecond\nthird")
+	for _, want := range []struct{ line, col int }{{0, 2}, {1, 3}, {2, 5}, {0, 0}} {
+		m.setComposeCursor(want.line, want.col)
+		if l, c := m.compose.Line(), m.compose.Column(); l != want.line || c != want.col {
+			t.Errorf("setComposeCursor(%d, %d) = line %d col %d",
+				want.line, want.col, l, c)
+		}
+	}
+}
+
+// TestApplySpellCandidateWrapped is the same check through a real caller: a
+// correction on the third line of a box whose first line wraps.
+func TestApplySpellCandidateWrapped(t *testing.T) {
+	m := composeModel(10, 10, "aaaa bbbb cccc\nsecond\nteh end")
+	m.spellPicker = true
+	m.spellCandidates = []spellCandidate{{Word: "teh", Suggestion: "the"}}
+
+	if !m.applySpellCandidate() {
+		t.Fatal("applySpellCandidate() returned false")
+	}
+	if got, want := m.compose.Value(), "aaaa bbbb cccc\nsecond\nthe end"; got != want {
+		t.Fatalf("value = %q, want %q", got, want)
+	}
+	// The caret belongs just after the replacement, on the line it edited.
+	if l, c := m.compose.Line(), m.compose.Column(); l != 2 || c != 3 {
+		t.Errorf("cursor = line %d col %d, want line 2 col 3", l, c)
+	}
+}

@@ -201,10 +201,13 @@ func composeRuneAt(runes []rune, r composeRow, col int) int {
 	return idx
 }
 
-// setComposeCursor places the caret at a logical line and rune column. The
-// textarea can only step the caret one *display* row at a time, so we walk down
-// until the logical line matches; that keeps it correct when earlier lines
-// soft-wrap across several rows.
+// setComposeCursor places the caret at a logical line and rune column. Use it
+// after any SetValue, which parks the caret at the end of the buffer.
+//
+// The textarea can only step the caret one *display* row at a time, so we walk
+// down until the logical line matches rather than stepping `line` times: a line
+// that soft-wraps occupies several display rows, and counting rows would land
+// short of the line we were asked for.
 func (m *Model) setComposeCursor(line, col int) {
 	m.compose.MoveToBegin()
 	for m.compose.Line() < line {

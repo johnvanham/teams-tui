@@ -175,6 +175,11 @@ it.
   `handleKey()` (`update.go`).
 - **Adding async work:** add a `tea.Cmd` constructor + a message type in
   `commands.go`, then a `case` in `Update` (`update.go`).
+- **Moving the compose caret:** after `m.compose.SetValue` (which parks it at the
+  end of the buffer) reposition with `setComposeCursor(line, col)`
+  (`composeclick.go`), never by stepping `CursorDown` once per logical line —
+  the textarea steps *display* rows, so that lands short whenever a line
+  soft-wraps.
 - **State** belongs on `Model` (`model.go`); initialize maps/slices in `New`.
 - **Styling** goes in `internal/ui/styles/styles.go`; don't hardcode colors in
   view code — reuse or add a named style. Exception: code-block token colours

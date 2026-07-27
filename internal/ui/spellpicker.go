@@ -88,11 +88,7 @@ func (m *Model) applySpellCandidate() bool {
 
 	// Reposition the cursor just after the inserted suggestion (SetValue parks
 	// it at the buffer end), mirroring the emoji/mention pickers.
-	m.compose.MoveToBegin()
-	for i := 0; i < row; i++ {
-		m.compose.CursorDown()
-	}
-	m.compose.SetCursorColumn(col + len([]rune(cand.Suggestion)))
+	m.setComposeCursor(row, col+len([]rune(cand.Suggestion)))
 	return true
 }
 
