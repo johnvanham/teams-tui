@@ -224,6 +224,13 @@ const maxChatPages = 20
 // A failure part-way through paging returns the chats gathered so far rather
 // than an error: the pages arrive newest-first, so a partial list is still the
 // useful part of the sidebar, and the next poll retries from scratch anyway.
+//
+// Chats are de-duplicated by ID across pages. Graph pages this collection with
+// a skiptoken over a *mutable* sort key (the last message's timestamp), so it is
+// not a snapshot: if a chat sitting on a later page receives a message between
+// two page requests it jumps to the front of the ordering and can be handed back
+// a second time inside a later page's window. Without this guard that showed up
+// as the same conversation listed twice in the sidebar.
 func (c *Client) ListChats(ctx context.Context, top, max int) ([]Chat, error) {
 	if top <= 0 || top > MaxChatPageSize {
 		top = MaxChatPageSize
@@ -237,6 +244,7 @@ func (c *Client) ListChats(ctx context.Context, top, max int) ([]Chat, error) {
 	q.Set("$orderby", "lastMessagePreview/createdDateTime desc")
 
 	out := make([]Chat, 0, max)
+	seen := make(map[string]bool, max)
 	// The first request is a relative path; subsequent ones are the absolute
 	// nextLink URLs, which do() passes through untouched.
 	next := "/me/chats?" + q.Encode()
@@ -248,9 +256,17 @@ func (c *Client) ListChats(ctx context.Context, top, max int) ([]Chat, error) {
 			}
 			return nil, err
 		}
-		out = append(out, resp.Value...)
-		if len(out) >= max {
-			return out[:max], nil
+		for _, chat := range resp.Value {
+			// Keep the first copy: pages arrive newest-first, so an earlier
+			// page's version of a chat is the more recent one.
+			if chat.ID != "" && seen[chat.ID] {
+				continue
+			}
+			seen[chat.ID] = true
+			out = append(out, chat)
+			if len(out) >= max {
+				return out, nil
+			}
 		}
 		next = resp.NextLink
 	}

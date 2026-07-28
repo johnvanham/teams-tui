@@ -26,6 +26,20 @@ func chatPage(prefix string, n int, nextLink string) string {
 	return body + "}"
 }
 
+// chatPageIDs renders a listResponse-shaped payload holding the given chat IDs
+// verbatim, so a test can make two pages overlap.
+func chatPageIDs(ids []string, nextLink string) string {
+	quoted := make([]string, 0, len(ids))
+	for _, id := range ids {
+		quoted = append(quoted, fmt.Sprintf(`{"id":%q}`, id))
+	}
+	body := `{"value":[` + strings.Join(quoted, ",") + `]`
+	if nextLink != "" {
+		body += fmt.Sprintf(`,"@odata.nextLink":%q`, nextLink)
+	}
+	return body + "}"
+}
+
 // chatServer serves the given page bodies in order, calling nextLink on each
 // one with the server's own URL so the client can follow them. It records the
 // request paths it served.
@@ -115,6 +129,72 @@ func TestListChatsPartialOnLaterPageError(t *testing.T) {
 	}
 	if len(chats) != 50 {
 		t.Errorf("len(chats) = %d, want 50", len(chats))
+	}
+}
+
+// Graph pages this collection with a skiptoken over a mutable sort key, so a
+// chat that receives a message between two page requests can be handed back on
+// both pages. Returning it twice put the same conversation in the sidebar
+// twice, so ListChats de-duplicates by ID.
+func TestListChatsDedupesAcrossPages(t *testing.T) {
+	c, _ := chatServer(t,
+		func(base string) string {
+			return chatPageIDs([]string{"a", "b", "c"}, base+"/me/chats?$skiptoken=abc")
+		},
+		// "b" got a message mid-paging and reappears alongside genuinely new chats.
+		func(base string) string { return chatPageIDs([]string{"b", "d"}, "") },
+	)
+
+	chats, err := c.ListChats(context.Background(), MaxChatPageSize, 200)
+	if err != nil {
+		t.Fatalf("ListChats() error = %v", err)
+	}
+
+	var got []string
+	for _, chat := range chats {
+		got = append(got, chat.ID)
+	}
+	want := []string{"a", "b", "c", "d"}
+	if len(got) != len(want) {
+		t.Fatalf("ids = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ids = %v, want %v", got, want)
+		}
+	}
+}
+
+// The max cap counts distinct chats: duplicates must not eat into the budget
+// (and so silently shorten the sidebar).
+func TestListChatsMaxCountsDistinctChats(t *testing.T) {
+	c, _ := chatServer(t,
+		func(base string) string {
+			return chatPageIDs([]string{"a", "b"}, base+"/me/chats?$skiptoken=abc")
+		},
+		func(base string) string {
+			return chatPageIDs([]string{"b", "c"}, base+"/me/chats?$skiptoken=def")
+		},
+		func(base string) string { return chatPageIDs([]string{"d"}, "") },
+	)
+
+	chats, err := c.ListChats(context.Background(), MaxChatPageSize, 4)
+	if err != nil {
+		t.Fatalf("ListChats() error = %v", err)
+	}
+
+	var got []string
+	for _, chat := range chats {
+		got = append(got, chat.ID)
+	}
+	want := []string{"a", "b", "c", "d"}
+	if len(got) != len(want) {
+		t.Fatalf("ids = %v, want %v (max must count distinct chats)", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ids = %v, want %v (max must count distinct chats)", got, want)
+		}
 	}
 }
 

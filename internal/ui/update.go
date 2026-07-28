@@ -1100,8 +1100,20 @@ func (m Model) handleChats(msg chatsMsg) (tea.Model, tea.Cmd) {
 	// Record the chats (and their order) into the model, then let
 	// rebuildChatList construct the list items and recompute unread state from
 	// the same single place used for between-poll refreshes.
+	//
+	// One entry per chat ID: rebuildChatList emits a row per chatOrder entry,
+	// so a repeated ID renders the same conversation twice (and shifts every
+	// row index below it, since the list is addressed positionally). ListChats
+	// already de-duplicates across pages; this keeps the invariant local to the
+	// model so no future producer of chatsMsg can break the sidebar.
 	m.chatOrder = m.chatOrder[:0]
+	seen := make(map[string]bool, len(chats))
+	deduped := chats[:0]
 	for _, c := range chats {
+		if seen[c.ID] {
+			continue
+		}
+		seen[c.ID] = true
 		// Graph does not guarantee a stable member order across polls, which
 		// made the participant header and chat names jump around. Sort members
 		// deterministically (by display name, then user ID) so the order is
@@ -1109,7 +1121,11 @@ func (m Model) handleChats(msg chatsMsg) (tea.Model, tea.Cmd) {
 		sortMembers(c.Members)
 		m.chatOrder = append(m.chatOrder, c.ID)
 		m.chats[c.ID] = c
+		deduped = append(deduped, c)
 	}
+	// Notifications read the same de-duplicated set, so a chat repeated by the
+	// server can't ping twice for one message.
+	chats = deduped
 
 	// Fire desktop notifications for new messages across all chats, using the
 	// previews Graph returned. The first poll only establishes baselines so the

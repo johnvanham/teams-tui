@@ -118,6 +118,43 @@ func TestSelectChatInListUsesVisibleItems(t *testing.T) {
 	}
 }
 
+// Graph can hand back the same chat on two pages of one listing (it pages over
+// a mutable sort key), and rebuildChatList emits one row per chatOrder entry —
+// so handleChats must collapse repeats or the sidebar shows the conversation
+// twice and every row below it shifts.
+func TestHandleChatsDedupesRepeatedChatIDs(t *testing.T) {
+	m := newChatListModel(t, "a", "a", "b")
+	m.phase = phaseReady
+	m.notifiedUntil = make(map[string]time.Time)
+	m.lastSync = make(map[string]time.Time)
+
+	now := time.Now()
+	chat := func(id string, ago time.Duration) graph.Chat {
+		return graph.Chat{
+			ID:                  id,
+			ChatType:            graph.ChatOneOnOne,
+			LastUpdatedDateTime: now.Add(-ago),
+			Members:             []graph.ConversationMember{{UserID: id, DisplayName: id}},
+		}
+	}
+	next, _ := m.handleChats(chatsMsg{chats: []graph.Chat{
+		chat("a", time.Minute),
+		chat("b", 2*time.Minute),
+		chat("a", time.Minute), // same chat repeated by the server
+	}})
+	got := next.(Model)
+
+	if len(got.chatOrder) != 2 {
+		t.Fatalf("chatOrder = %v, want 2 entries", got.chatOrder)
+	}
+	if got.chatOrder[0] != "a" || got.chatOrder[1] != "b" {
+		t.Errorf("chatOrder = %v, want [a b]", got.chatOrder)
+	}
+	if n := len(got.list.Items()); n != 2 {
+		t.Errorf("list items = %d, want 2", n)
+	}
+}
+
 // A chat that isn't visible can't be highlighted; selecting it must be a no-op
 // rather than moving the cursor to an unrelated row.
 func TestSelectChatInListUnknownChatIsNoop(t *testing.T) {
