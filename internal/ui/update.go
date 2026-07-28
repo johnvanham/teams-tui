@@ -83,7 +83,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.phase = phaseLoading
 		return m, tea.Batch(
 			loadMeCmd(m.ctx, m.client),
-			loadChatsCmd(m.ctx, m.client),
+			loadChatsCmd(m.ctx, m.client, m.maxChats()),
 			loadMeetingsCmd(m.ctx, m.client, m.meetingLookahead()),
 			pollTickCmd(m.pollInterval()),
 			fastTickCmd(fastInterval),
@@ -277,6 +277,12 @@ func (m Model) chatIndexAtY(y int) int {
 	if perPage <= 0 {
 		return -1
 	}
+	// Below the last row of the page: the click landed on the chrome under the
+	// list (status bar, help, legend), not on an item. Without this guard the
+	// row index would spill into the next page and open an unrelated chat.
+	if rowOnPage >= perPage {
+		return -1
+	}
 	abs := m.list.Paginator.Page*perPage + rowOnPage
 	items := m.list.VisibleItems()
 	if abs < 0 || abs >= len(items) {
@@ -349,9 +355,10 @@ func (m Model) msgAtY(y int) (int, bool) {
 }
 
 // withinSidebar reports whether an X coordinate falls inside the sidebar
-// column (excluding its left/right borders).
+// column. The borders count as part of the pane: a click that lands a cell
+// off should still activate the sidebar rather than doing nothing.
 func (m Model) withinSidebar(x int) bool {
-	return x >= 1 && x < sidebarWidth-1
+	return x >= 0 && x < sidebarWidth
 }
 
 // composeTop is the screen Y of the compose box's top border. Below the
@@ -391,7 +398,9 @@ func (m Model) handlePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmd, m.scheduleSpellCheck())
 }
 
-// handleMouseClick activates the clicked chat and jumps focus to compose.
+// handleMouseClick focuses the clicked pane and acts on what was clicked:
+// a chat row opens that chat, a message selects it (and anchors a text
+// selection), the compose box moves the caret.
 func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if m.phase != phaseReady || msg.Button != tea.MouseLeft {
 		return m, nil
@@ -399,52 +408,60 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	// Any click ends a held compose selection; clicking back into the compose
 	// box starts a fresh one below.
 	m.clearComposeSelection()
-	if !m.withinSidebar(msg.X) {
-		if msg.X >= sidebarWidth {
-			// A click on the compose box focuses it so the user can type,
-			// moves the caret to the clicked character, and anchors a text
-			// selection there (a subsequent drag grows it).
-			if m.withinCompose(msg.Y) {
-				m.focus = focusCompose
-				m.clearSelection()     // drop any messages-pane text selection
-				m.renderConversation() // drop its highlight
-				m.startComposeSelection(msg.X, msg.Y)
-				return m, m.compose.Focus()
-			}
-			// A click directly on an image placeholder opens that image.
-			if idx, ok := m.imageAtY(msg.Y); ok {
-				return m.viewImageAt(idx)
-			}
-			// Otherwise it's a click in the messages pane: focus it and select
-			// the clicked message so react/quote act on it. Also begin a
-			// potential text selection at the click point; a subsequent drag
-			// (MouseMotionMsg) grows it, while a plain click clears it on
-			// release so nothing is left highlighted.
-			m.focus = focusMessages
-			m.compose.Blur()
-			if idx, ok := m.msgAtY(msg.Y); ok {
-				m.selectedMsg = idx
-			}
-			m.clearSelection()
-			if pt, ok := m.selectionAt(msg.X, msg.Y); ok && m.selectionWithinMessages(msg.X) {
-				m.selecting = true
-				m.selAnchorLn, m.selAnchorCol = pt.line, pt.col
-				m.selCurLn, m.selCurCol = pt.line, pt.col
-			}
-			m.renderConversation()
-		}
-		return m, nil
+	if m.withinSidebar(msg.X) {
+		return m.clickSidebar(msg)
+	}
+	// A click on the compose box focuses it so the user can type, moves the
+	// caret to the clicked character, and anchors a text selection there (a
+	// subsequent drag grows it).
+	if m.withinCompose(msg.Y) {
+		m.focus = focusCompose
+		m.clearSelection()     // drop any messages-pane text selection
+		m.renderConversation() // drop its highlight
+		m.startComposeSelection(msg.X, msg.Y)
+		return m, m.compose.Focus()
+	}
+	// A click directly on an image placeholder opens that image.
+	if idx, ok := m.imageAtY(msg.Y); ok {
+		return m.viewImageAt(idx)
+	}
+	// Otherwise it's a click in the messages pane: focus it and select the
+	// clicked message so react/quote act on it. Also begin a potential text
+	// selection at the click point; a subsequent drag (MouseMotionMsg) grows
+	// it, while a plain click clears it on release so nothing is left
+	// highlighted.
+	m.focus = focusMessages
+	m.compose.Blur()
+	if idx, ok := m.msgAtY(msg.Y); ok {
+		m.selectedMsg = idx
+	}
+	m.clearSelection()
+	if pt, ok := m.selectionAt(msg.X, msg.Y); ok && m.selectionWithinMessages(msg.X) {
+		m.selecting = true
+		m.selAnchorLn, m.selAnchorCol = pt.line, pt.col
+		m.selCurLn, m.selCurCol = pt.line, pt.col
+	}
+	m.renderConversation()
+	return m, nil
+}
+
+// clickSidebar handles a left click anywhere in the sidebar column. Like the
+// messages and compose panes, the sidebar takes focus on click — including
+// when the click misses an item row (its header, a gap between rows, the
+// border) — so the arrow keys drive the list afterwards. Focus stays on the
+// list rather than jumping to compose; typing a printable character still
+// hands off to the compose box (see handleKey).
+func (m Model) clickSidebar(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
+	m.focus = focusChats
+	m.compose.Blur()
+	if m.selecting {
+		m.clearSelection()
+		m.renderConversation()
 	}
 	// In contacts mode the sidebar holds the people list, whose row geometry
 	// the chat click-mapping doesn't track; keep contact selection keyboard-
-	// driven (focus the sidebar so arrows/enter work).
+	// driven (focusing the sidebar is enough to make arrows/enter work).
 	if m.sidebarMode == sidebarContacts {
-		m.focus = focusChats
-		m.compose.Blur()
-		if m.selecting {
-			m.clearSelection()
-			m.renderConversation()
-		}
 		return m, nil
 	}
 	idx := m.chatIndexAtY(msg.Y)
@@ -456,9 +473,7 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if c == "" {
 		return m, nil
 	}
-	openCmd := m.openChat(c)
-	m.focus = focusCompose
-	return m, tea.Batch(openCmd, m.compose.Focus())
+	return m, m.openChat(c)
 }
 
 // handleMouseMotion extends an in-progress text selection as the user drags the
@@ -513,19 +528,40 @@ func (m Model) handleMouseRelease(msg tea.MouseReleaseMsg) (tea.Model, tea.Cmd) 
 }
 
 // handleMouseWheel scrolls whichever pane the pointer is over: the chat list
-// when over the sidebar, otherwise the active conversation viewport.
+// when over the sidebar, otherwise the active conversation viewport. A
+// horizontal wheel (tilt wheel, or a trackpad's sideways swipe) flips through
+// chats from anywhere on screen.
 func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	if m.phase != phaseReady {
 		return m, nil
 	}
+	switch msg.Button {
+	case tea.MouseWheelLeft:
+		return m, m.stepChat(-1)
+	case tea.MouseWheelRight:
+		return m, m.stepChat(1)
+	}
 	if m.withinSidebar(msg.X) {
-		var cmd tea.Cmd
+		// bubbles' list ignores mouse messages entirely, so move its cursor
+		// here rather than forwarding the message (which did nothing).
 		if m.sidebarMode == sidebarContacts {
-			m.contacts, cmd = m.contacts.Update(msg)
-		} else {
-			m.list, cmd = m.list.Update(msg)
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				m.contacts.CursorUp()
+			case tea.MouseWheelDown:
+				m.contacts.CursorDown()
+			}
+			return m, nil
 		}
-		return m, cmd
+		// Over the chat list a wheel notch moves one chat and previews it,
+		// exactly like the up/down keys do.
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			return m, m.stepChat(-1)
+		case tea.MouseWheelDown:
+			return m, m.stepChat(1)
+		}
+		return m, nil
 	}
 	// Scroll the conversation. A larger step per wheel notch feels more
 	// responsive, especially on trackpads.
@@ -537,6 +573,34 @@ func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		m.viewport.ScrollDown(wheelScrollLines)
 	}
 	return m, nil
+}
+
+// stepChat moves the chat-list highlight by delta rows and opens the chat it
+// lands on, previewing it in the messages pane the way the arrow keys do.
+// Focus is deliberately left alone: flipping through chats with the wheel
+// shouldn't yank the keyboard out of the compose box. Returns nil when there
+// is nowhere to move (contacts mode, an empty list, or either end of it).
+//
+// The highlight has to move with the conversation because rebuildChatList
+// re-derives it from currentChat on every poll; a cursor that browsed away on
+// its own would snap back at the next refresh.
+func (m *Model) stepChat(delta int) tea.Cmd {
+	if m.sidebarMode != sidebarChats {
+		return nil
+	}
+	// Index/Select address the filtered view, which is what VisibleItems
+	// returns, so both agree while a filter is active.
+	items := m.list.VisibleItems()
+	idx := m.list.Index() + delta
+	if idx < 0 || idx >= len(items) {
+		return nil
+	}
+	m.list.Select(idx)
+	c := m.selectedChatID()
+	if c == "" || c == m.currentChat {
+		return nil
+	}
+	return m.openChat(c)
 }
 
 // maybeLoadOlder fetches an older page of messages when the conversation is
@@ -1166,7 +1230,7 @@ func (m Model) handleChatCreated(msg chatCreatedMsg) (tea.Model, tea.Cmd) {
 	m.focus = focusCompose
 	openCmd := m.openChat(msg.chat.ID)
 	return m, tea.Batch(
-		loadChatsCmd(m.ctx, m.client), // surface the new chat in the sidebar
+		loadChatsCmd(m.ctx, m.client, m.maxChats()), // surface the new chat in the sidebar
 		openCmd,
 		m.compose.Focus(),
 	)
@@ -1189,7 +1253,7 @@ func (m Model) handleOpenChatByID(msg openChatByIDMsg) (tea.Model, tea.Cmd) {
 	m.focus = focusMessages
 	openCmd := m.openChat(msg.chatID) // also moves the sidebar highlight
 	if _, known := m.chats[msg.chatID]; !known {
-		return m, tea.Batch(loadChatsCmd(m.ctx, m.client), openCmd)
+		return m, tea.Batch(loadChatsCmd(m.ctx, m.client, m.maxChats()), openCmd)
 	}
 	return m, openCmd
 }
@@ -1536,7 +1600,7 @@ func (m Model) handleMeetings(msg meetingsMsg) (tea.Model, tea.Cmd) {
 func (m Model) handlePollTick() (tea.Model, tea.Cmd) {
 	cmds := []tea.Cmd{pollTickCmd(m.pollInterval())}
 	if m.client != nil {
-		cmds = append(cmds, loadChatsCmd(m.ctx, m.client))
+		cmds = append(cmds, loadChatsCmd(m.ctx, m.client, m.maxChats()))
 	}
 	return m, tea.Batch(cmds...)
 }
@@ -2268,7 +2332,7 @@ func (m Model) refreshCmd() tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
-	cmds := []tea.Cmd{loadChatsCmd(m.ctx, m.client)}
+	cmds := []tea.Cmd{loadChatsCmd(m.ctx, m.client, m.maxChats())}
 	if m.currentChat != "" {
 		cmds = append(cmds, loadMessagesCmd(m.ctx, m.client, m.currentChat))
 	}

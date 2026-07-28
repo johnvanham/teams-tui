@@ -239,8 +239,10 @@ registration first if your tenant requires it.
 | -------------- | ---------------------------------------- |
 | `tab` / `shift+tab` | Move focus between Chats / Messages / Compose |
 | `↑`/`↓` `j`/`k`| Navigate the focused pane; in Messages, move the message selection |
-| click          | Select the clicked message (Messages); click the compose box to focus it and put the cursor on the clicked character |
+| click          | Focus the clicked pane: a chat row opens that chat (Chats), a message selects it (Messages), the compose box puts the cursor on the clicked character |
 | click + drag   | Highlight text in the Messages pane or the compose box (drag over the text you want to select) |
+| scroll ↑/↓     | Scroll the conversation, or move through the chat list when the pointer is over the sidebar |
+| scroll ←/→     | Switch to the previous/next chat (works anywhere on screen; needs a tilt wheel or a trackpad's sideways swipe) |
 | `y` / `c`      | Copy the highlighted text selection to the system clipboard (Messages) |
 | `ctrl+c`       | Copy the highlighted compose-box selection to the system clipboard; with nothing highlighted, quits |
 | `enter`        | Open selected chat (Chats) / send message (Compose) / start chat (Contacts) |
@@ -347,6 +349,11 @@ and `ui/highlight.go` syntax-highlights the rendered block using a
   Linux, `pbcopy` on macOS, and `clip` on Windows. (The app captures the mouse
   for its own selection; to fall back to your terminal's native selection, hold
   the modifier your terminal uses to bypass app mouse reporting — often `shift`.)
+- Clicking any pane focuses it, so the keyboard follows the mouse; clicking a
+  chat row also opens that chat. The wheel scrolls the conversation (or the chat
+  list when the pointer is over the sidebar), and a horizontal wheel flips to the
+  previous/next chat from anywhere on screen. Typing a printable character while
+  the sidebar has focus still jumps straight to the compose box.
 - The compose box takes the mouse too: click to put the cursor on a character,
   or click-and-drag to highlight text. `ctrl+c` copies the highlight (and only
   quits when nothing is highlighted), and typing, pasting or `backspace`/`delete`

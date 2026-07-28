@@ -58,6 +58,14 @@ into a single `Update`. Never block in `Update` or `View`; do I/O in a `tea.Cmd`
   `rebuildChatList` (and `openChat`) therefore re-derive the highlight from
   `currentChat` via `selectChatInList`, which indexes `list.VisibleItems()`
   (the filtered view), not `chatOrder`.
+  Mouse routing lives here too: `handleMouseClick` focuses whichever pane was
+  clicked (`withinSidebar`/`withinCompose` split the screen; `clickSidebar`
+  maps a row to a chat via `chatIndexAtY`), and `handleMouseWheel` scrolls the
+  conversation, walks the sidebar list, or — on a horizontal wheel — flips
+  chats via `stepChat`. `bubbles/list` ignores mouse messages entirely, so the
+  sidebar's cursor must be moved by hand rather than forwarded to it. Anything
+  that moves the sidebar cursor must also move `currentChat` (`stepChat` opens
+  the chat it lands on), or the next `rebuildChatList` snaps it back.
 - `view.go` — rendering + `layout()` geometry. Constants like `sidebarWidth`.
   Message bodies are rendered by `renderBody`, which splits prose from fenced
   code blocks and styles each (`renderCodeBlock` for blocks).
