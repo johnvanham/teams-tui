@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -117,6 +118,64 @@ func TestSidebarWheelDoesNotMoveChatList(t *testing.T) {
 			t.Errorf("button %v: index = %d, currentChat = %q, want 0/%q",
 				btn, mm.list.Index(), mm.currentChat, "c0")
 		}
+	}
+}
+
+// wheel feeds one wheel event through the update path, folding the returned
+// model back into m the way the Bubble Tea runtime does.
+func wheel(t *testing.T, m *Model, btn tea.MouseButton) tea.Cmd {
+	t.Helper()
+	got, cmd := m.handleMouseWheel(tea.MouseWheelMsg{X: 5, Y: 3, Button: btn})
+	mm, ok := got.(Model)
+	if !ok {
+		t.Fatalf("handleMouseWheel returned %T, want Model", got)
+	}
+	*m = mm
+	return cmd
+}
+
+// A trackpad reports one sideways swipe as a burst of notches (plus momentum),
+// so only the first one may turn a page; paging resumes once the wheel goes
+// quiet again.
+func TestHorizontalWheelPagesOncePerSwipe(t *testing.T) {
+	m, _ := pagedChatListModel(t, 20, 5)
+	m.phase = phaseReady
+
+	wheel(t, m, tea.MouseWheelRight)
+	if got := m.list.Paginator.Page; got != 1 {
+		t.Fatalf("after the first notch: page = %d, want 1", got)
+	}
+	// The rest of the burst arrives immediately and must be swallowed.
+	for i := 0; i < 20; i++ {
+		wheel(t, m, tea.MouseWheelRight)
+	}
+	if got := m.list.Paginator.Page; got != 1 {
+		t.Errorf("after the burst: page = %d, want 1 (one page per swipe)", got)
+	}
+
+	// Once the gesture has settled, the next swipe pages again.
+	m.lastChatPageWheel = time.Now().Add(-chatPageWheelQuiet)
+	wheel(t, m, tea.MouseWheelRight)
+	if got := m.list.Paginator.Page; got != 2 {
+		t.Errorf("after the wheel settled: page = %d, want 2", got)
+	}
+}
+
+// Swiping back the other way is a new gesture, not momentum, so it pages at
+// once rather than waiting for the quiet period.
+func TestHorizontalWheelReversalPagesImmediately(t *testing.T) {
+	m, _ := pagedChatListModel(t, 20, 5)
+	m.phase = phaseReady
+
+	wheel(t, m, tea.MouseWheelRight)
+	wheel(t, m, tea.MouseWheelRight) // swallowed
+	if got := m.list.Paginator.Page; got != 1 {
+		t.Fatalf("setup: page = %d, want 1", got)
+	}
+
+	wheel(t, m, tea.MouseWheelLeft)
+	if got := m.list.Paginator.Page; got != 0 {
+		t.Errorf("after reversing: page = %d, want 0", got)
 	}
 }
 

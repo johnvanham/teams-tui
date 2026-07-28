@@ -61,7 +61,9 @@ into a single `Update`. Never block in `Update` or `View`; do I/O in a `tea.Cmd`
   Mouse routing lives here too: `handleMouseClick` focuses whichever pane was
   clicked (`withinSidebar`/`withinCompose` split the screen; `clickSidebar`
   maps a row to a chat via `chatIndexAtY`), and `handleMouseWheel` scrolls the
-  conversation or — on a horizontal wheel — pages the sidebar via `pageChats`.
+  conversation or — on a horizontal wheel — pages the sidebar via
+  `pageChatsByWheel`, which throttles a trackpad's burst of notches down to one
+  `pageChats` call per swipe (`chatPageWheelQuiet`).
   `bubbles/list` ignores mouse messages entirely, so the sidebar's cursor must
   be moved by hand rather than forwarded to it. Anything that moves that cursor
   must also move `currentChat` (`pageChats` opens the chat at the top of the

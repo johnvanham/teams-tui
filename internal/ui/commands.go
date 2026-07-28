@@ -151,6 +151,12 @@ const (
 	// wheelScrollLines is how many lines one mouse-wheel notch scrolls the
 	// conversation. Higher feels more responsive, especially on trackpads.
 	wheelScrollLines = 5
+	// chatPageWheelQuiet is how long the horizontal wheel must go quiet before
+	// it turns another chat-list page. A trackpad reports a sideways swipe as
+	// a burst of notches followed by kinetic momentum, which would otherwise
+	// fly through the whole list on one flick; a mouse's tilt wheel sends
+	// discrete notches well over this apart.
+	chatPageWheelQuiet = 400 * time.Millisecond
 	// fastInterval is the rapid incremental poll of the open chat when the app
 	// is focused — near-real-time without true push.
 	fastInterval = 1 * time.Second

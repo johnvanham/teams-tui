@@ -543,9 +543,9 @@ func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.Button {
 	case tea.MouseWheelLeft:
-		return m, m.pageChats(-1)
+		return m.pageChatsByWheel(-1)
 	case tea.MouseWheelRight:
-		return m, m.pageChats(1)
+		return m.pageChatsByWheel(1)
 	}
 	if m.withinSidebar(msg.X) {
 		// bubbles' list ignores mouse messages entirely, so the contacts
@@ -571,6 +571,24 @@ func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		m.viewport.ScrollDown(wheelScrollLines)
 	}
 	return m, nil
+}
+
+// pageChatsByWheel turns a horizontal wheel notch into at most one chat-list
+// page turn per gesture. A trackpad delivers a sideways swipe as a burst of
+// notches (and keeps sending them while the kinetic scroll decays), so only the
+// first notch pages: the rest merely push the deadline out, and paging resumes
+// once the wheel has been quiet for chatPageWheelQuiet. Swiping the other way
+// pages immediately — a reversal is a new gesture, not momentum.
+func (m Model) pageChatsByWheel(delta int) (tea.Model, tea.Cmd) {
+	now := time.Now()
+	settled := now.Sub(m.lastChatPageWheel) >= chatPageWheelQuiet
+	reversed := m.lastChatPageDir != 0 && m.lastChatPageDir != delta
+	m.lastChatPageWheel = now
+	m.lastChatPageDir = delta
+	if !settled && !reversed {
+		return m, nil
+	}
+	return m, m.pageChats(delta)
 }
 
 // pageChats flips the chat list by delta pages and highlights the chat at the

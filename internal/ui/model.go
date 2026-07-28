@@ -107,6 +107,12 @@ type Model struct {
 	msgLineStart    []int                     // convMsgs[i] -> viewport content line of its header
 	selectedMsg     int                       // index into convMsgs of the highlighted message (-1 = none)
 
+	// Horizontal-wheel chat paging (see pageChatsByWheel). A trackpad swipe
+	// arrives as a burst of notches — plus kinetic momentum afterwards — so
+	// these throttle it down to one page turn per gesture.
+	lastChatPageWheel time.Time // when the last horizontal wheel notch arrived
+	lastChatPageDir   int       // its direction (-1 back, +1 forward, 0 none yet)
+
 	// Mouse text selection in the messages viewport. selContent holds the
 	// rendered conversation split into content lines (with ANSI styling) so a
 	// selection can be highlighted and its plain text extracted. A drag records

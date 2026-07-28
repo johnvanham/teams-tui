@@ -242,7 +242,7 @@ registration first if your tenant requires it.
 | click          | Focus the clicked pane: a chat row opens that chat (Chats), a message selects it (Messages), the compose box puts the cursor on the clicked character |
 | click + drag   | Highlight text in the Messages pane or the compose box (drag over the text you want to select) |
 | scroll ↑/↓     | Scroll the conversation (the sidebar is not wheel-scrolled: use the keys, a click, or page it with a horizontal scroll) |
-| scroll ←/→     | Page the chat list back/forward, landing on the chat at the top of that page (works anywhere on screen; needs a tilt wheel or a trackpad's sideways swipe) |
+| scroll ←/→     | Page the chat list back/forward — one page per swipe — landing on the chat at the top of that page (works anywhere on screen; needs a tilt wheel or a trackpad's sideways swipe) |
 | `y` / `c`      | Copy the highlighted text selection to the system clipboard (Messages) |
 | `ctrl+c`       | Copy the highlighted compose-box selection to the system clipboard; with nothing highlighted, quits |
 | `enter`        | Open selected chat (Chats) / send message (Compose) / start chat (Contacts) |
@@ -353,7 +353,10 @@ and `ui/highlight.go` syntax-highlights the rendered block using a
   chat row also opens that chat. The wheel scrolls the conversation, and a
   horizontal wheel (tilt wheel or a trackpad's sideways swipe) pages the chat
   list from anywhere on screen, opening the chat at the top of the page it lands
-  on — from there, arrow through the page or click a row. The wheel deliberately
+  on — from there, arrow through the page or click a row. A trackpad reports one
+  swipe as a burst of scroll events, so paging is throttled to one page per
+  gesture (swiping back the other way takes effect immediately). The wheel
+  deliberately
   doesn't scroll the sidebar itself: moving the highlight opens the chat it
   lands on, so free-running wheel scrolling would be a stream of chat loads.
   Typing a printable character while the sidebar has focus still jumps straight
