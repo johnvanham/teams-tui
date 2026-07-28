@@ -98,7 +98,9 @@ into a single `Update`. Never block in `Update` or `View`; do I/O in a `tea.Cmd`
 ### Graph client (`internal/graph/`)
 - `client.go` — `Client` + `do()` (the single request helper). All calls funnel
   through `do()`, which handles auth headers and absolute-vs-relative URLs
-  (absolute is used to follow `@odata.nextLink`).
+  (absolute is used to follow `@odata.nextLink`). `ListChats` pages that way up
+  to `Config.MaxChats` (Graph caps a page at `MaxChatPageSize` = 50), returning
+  whatever it has if a later page fails.
 - `types.go` — Graph data models (`Chat`, `Message`, `Presence`, etc.).
 - `text.go` — HTML→plaintext conversion for message bodies.
 - `code.go` — receive side: extracts code from message HTML (Teams'

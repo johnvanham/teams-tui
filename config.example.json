@@ -2,6 +2,7 @@
   "client_id": "REPLACE-WITH-APPLICATION-CLIENT-ID",
   "tenant_id": "REPLACE-WITH-DIRECTORY-TENANT-ID",
   "poll_interval_seconds": 10,
+  "max_chats": 200,
   "meeting_lookahead_minutes": 5,
   "disable_desktop_notify": false,
   "code_block_style": "monokai",

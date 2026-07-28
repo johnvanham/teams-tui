@@ -202,22 +202,59 @@ func isoDuration(d time.Duration) string {
 	return fmt.Sprintf("PT%dM", mins)
 }
 
+// MaxChatPageSize is the largest $top Graph accepts for /me/chats when members
+// and the last message preview are expanded. Asking for more is rejected, so
+// larger result sets have to be assembled by following @odata.nextLink.
+const MaxChatPageSize = 50
+
+// maxChatPages caps how many pages ListChats will follow. It is a safety net
+// against a server that keeps handing out nextLinks (and against an absurd
+// max), not a limit users are expected to hit: 20 pages is 1000 chats.
+const maxChatPages = 20
+
 // ListChats returns the user's chats, expanding members and last message
 // preview so the chat list can render names and previews without extra calls.
-func (c *Client) ListChats(ctx context.Context, top int) ([]Chat, error) {
-	if top <= 0 {
-		top = 50
+//
+// top is the page size (clamped to MaxChatPageSize) and max the total number of
+// chats to return; pages are followed via @odata.nextLink until max is reached
+// or Graph runs out of chats. Graph hands out one page well below most users'
+// chat counts, so without paging the sidebar silently stops at the 50 most
+// recently active conversations.
+//
+// A failure part-way through paging returns the chats gathered so far rather
+// than an error: the pages arrive newest-first, so a partial list is still the
+// useful part of the sidebar, and the next poll retries from scratch anyway.
+func (c *Client) ListChats(ctx context.Context, top, max int) ([]Chat, error) {
+	if top <= 0 || top > MaxChatPageSize {
+		top = MaxChatPageSize
+	}
+	if max <= 0 {
+		max = top
 	}
 	q := url.Values{}
 	q.Set("$top", fmt.Sprintf("%d", top))
 	q.Set("$expand", "members,lastMessagePreview")
 	q.Set("$orderby", "lastMessagePreview/createdDateTime desc")
 
-	var resp listResponse[Chat]
-	if err := c.do(ctx, http.MethodGet, "/me/chats?"+q.Encode(), nil, nil, &resp); err != nil {
-		return nil, err
+	out := make([]Chat, 0, max)
+	// The first request is a relative path; subsequent ones are the absolute
+	// nextLink URLs, which do() passes through untouched.
+	next := "/me/chats?" + q.Encode()
+	for page := 0; next != "" && page < maxChatPages; page++ {
+		var resp listResponse[Chat]
+		if err := c.do(ctx, http.MethodGet, next, nil, nil, &resp); err != nil {
+			if len(out) > 0 {
+				return out, nil
+			}
+			return nil, err
+		}
+		out = append(out, resp.Value...)
+		if len(out) >= max {
+			return out[:max], nil
+		}
+		next = resp.NextLink
 	}
-	return resp.Value, nil
+	return out, nil
 }
 
 // MarkChatRead marks a chat as read for the signed-in user, advancing the

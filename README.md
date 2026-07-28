@@ -163,6 +163,7 @@ Default location: `$XDG_CONFIG_HOME/teams-tui/config.json` (typically
   "client_id": "00000000-0000-0000-0000-000000000000",
   "tenant_id": "11111111-1111-1111-1111-111111111111",
   "poll_interval_seconds": 10,
+  "max_chats": 200,
   "meeting_lookahead_minutes": 5,
   "disable_desktop_notify": false,
   "code_block_style": "monokai",
@@ -171,6 +172,11 @@ Default location: `$XDG_CONFIG_HOME/teams-tui/config.json` (typically
   "focus_command": "gdbus call --session --dest org.gnome.Ptyxis --object-path /org/gnome/Ptyxis --method org.freedesktop.Application.Activate \"{'activation-token': <'{token}'>}\""
 }
 ```
+
+`max_chats` caps how many chats are loaded into the sidebar. Graph returns them
+most-recently-active first, 50 per page, and teams-tui follows the paging links
+until it has this many, so raising it costs one extra request per 50 chats on
+every poll. Defaults to 200; overridable via `TEAMS_TUI_MAX_CHATS`.
 
 `code_block_style` selects the [chroma](https://github.com/alecthomas/chroma)
 theme used to syntax-highlight code blocks (e.g. `monokai`, `dracula`,

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -36,6 +37,10 @@ type Config struct {
 	Scopes []string `json:"scopes,omitempty"`
 	// PollInterval in seconds for refreshing chats/messages.
 	PollIntervalSeconds int `json:"poll_interval_seconds,omitempty"`
+	// MaxChats caps how many chats are loaded into the sidebar. Graph returns
+	// them newest-activity first, 50 per page, so anything above 50 costs an
+	// extra request per page on every poll. Defaults to DefaultMaxChats.
+	MaxChats int `json:"max_chats,omitempty"`
 	// MeetingLookaheadMinutes controls how far ahead to warn about meetings.
 	MeetingLookaheadMinutes int `json:"meeting_lookahead_minutes,omitempty"`
 	// DisableDesktopNotify turns off OS-level desktop notifications.
@@ -79,6 +84,11 @@ const DefaultFocusCommand = `gdbus call --session ` +
 // DefaultCodeBlockStyle is the chroma theme used to colour code blocks when the
 // config doesn't specify one.
 const DefaultCodeBlockStyle = "monokai"
+
+// DefaultMaxChats is how many chats the sidebar loads by default: four Graph
+// pages, enough to cover the conversations most people scroll back to while
+// keeping the per-poll request count small.
+const DefaultMaxChats = 200
 
 // DefaultScopes are the delegated permissions the TUI needs. offline_access is
 // required to obtain a refresh token for the keyring cache.
@@ -138,6 +148,11 @@ func Load() (*Config, error) {
 	if v := os.Getenv("TEAMS_TUI_FOCUS_COMMAND"); v != "" {
 		cfg.FocusCommand = v
 	}
+	if v := os.Getenv("TEAMS_TUI_MAX_CHATS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.MaxChats = n
+		}
+	}
 
 	cfg.applyDefaults()
 
@@ -167,6 +182,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MeetingLookaheadMinutes <= 0 {
 		c.MeetingLookaheadMinutes = 5
+	}
+	if c.MaxChats <= 0 {
+		c.MaxChats = DefaultMaxChats
 	}
 	if c.CodeBlockStyle == "" {
 		c.CodeBlockStyle = DefaultCodeBlockStyle

@@ -213,10 +213,11 @@ func loadMeCmd(ctx context.Context, c *graph.Client) tea.Cmd {
 	}
 }
 
-// loadChatsCmd fetches the chat list.
-func loadChatsCmd(ctx context.Context, c *graph.Client) tea.Cmd {
+// loadChatsCmd fetches the chat list, paging until max chats have been
+// collected (or Graph runs out).
+func loadChatsCmd(ctx context.Context, c *graph.Client, max int) tea.Cmd {
 	return func() tea.Msg {
-		chats, err := c.ListChats(ctx, 50)
+		chats, err := c.ListChats(ctx, graph.MaxChatPageSize, max)
 		if err != nil {
 			return errMsg{err}
 		}

@@ -381,6 +381,11 @@ func (m Model) pollInterval() time.Duration {
 	return time.Duration(m.cfg.PollIntervalSeconds) * time.Second
 }
 
+// maxChats returns the configured ceiling on how many chats the sidebar loads.
+func (m Model) maxChats() int {
+	return m.cfg.MaxChats
+}
+
 // meetingLookahead returns how far ahead to look for meetings.
 func (m Model) meetingLookahead() time.Duration {
 	return time.Duration(m.cfg.MeetingLookaheadMinutes) * time.Minute
