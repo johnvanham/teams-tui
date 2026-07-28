@@ -61,11 +61,12 @@ into a single `Update`. Never block in `Update` or `View`; do I/O in a `tea.Cmd`
   Mouse routing lives here too: `handleMouseClick` focuses whichever pane was
   clicked (`withinSidebar`/`withinCompose` split the screen; `clickSidebar`
   maps a row to a chat via `chatIndexAtY`), and `handleMouseWheel` scrolls the
-  conversation, walks the sidebar list, or — on a horizontal wheel — flips
-  chats via `stepChat`. `bubbles/list` ignores mouse messages entirely, so the
-  sidebar's cursor must be moved by hand rather than forwarded to it. Anything
-  that moves the sidebar cursor must also move `currentChat` (`stepChat` opens
-  the chat it lands on), or the next `rebuildChatList` snaps it back.
+  conversation or — on a horizontal wheel — pages the sidebar via `pageChats`.
+  `bubbles/list` ignores mouse messages entirely, so the sidebar's cursor must
+  be moved by hand rather than forwarded to it. Anything that moves that cursor
+  must also move `currentChat` (`pageChats` opens the chat at the top of the
+  page it lands on), or the next `rebuildChatList` snaps it back — which is why
+  the wheel doesn't scroll the chat list row by row.
 - `view.go` — rendering + `layout()` geometry. Constants like `sidebarWidth`.
   Message bodies are rendered by `renderBody`, which splits prose from fenced
   code blocks and styles each (`renderCodeBlock` for blocks).

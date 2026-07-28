@@ -1,72 +1,123 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 )
 
-// The horizontal wheel flips to the next/previous chat, moving both the
-// highlight and the open conversation.
-func TestStepChatMovesToAdjacentChat(t *testing.T) {
-	m := newChatListModel(t, "a", "a", "b", "c")
-	m.selectChatInList("a")
+// pagedChatListModel returns a Model whose sidebar holds n chats ("c0".."cN")
+// spread over at least three pages, plus the resulting page size. The list's
+// own pagination math decides how many rows fit, so the page size is read back
+// rather than assumed.
+func pagedChatListModel(t *testing.T, n, rows int) (*Model, int) {
+	t.Helper()
+	ids := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		ids = append(ids, fmt.Sprintf("c%d", i))
+	}
+	m := newChatListModel(t, ids[0], ids...)
+	// Each item spans delegateRows() screen rows, so height sets the page size.
+	m.list.SetSize(30, rows*m.delegateRows())
+	perPage := m.list.Paginator.PerPage
+	if perPage < 2 || m.list.Paginator.TotalPages < 3 {
+		t.Fatalf("setup: PerPage = %d over %d pages, want >=2 over >=3",
+			perPage, m.list.Paginator.TotalPages)
+	}
+	m.selectChatInList(ids[0])
+	return m, perPage
+}
 
-	m.stepChat(1)
-	if got := highlighted(m); got != "b" {
-		t.Errorf("after stepChat(1): highlighted = %q, want %q", got, "b")
+// The horizontal wheel flips a whole page at a time and lands on the chat at
+// the top of that page, opening it.
+func TestPageChatsMovesAPageAtATime(t *testing.T) {
+	m, perPage := pagedChatListModel(t, 20, 5)
+	top := fmt.Sprintf("c%d", perPage) // first chat on page 2
+
+	m.pageChats(1)
+	if got := m.list.Paginator.Page; got != 1 {
+		t.Errorf("after pageChats(1): page = %d, want 1", got)
 	}
-	if m.currentChat != "b" {
-		t.Errorf("after stepChat(1): currentChat = %q, want %q", m.currentChat, "b")
+	if got := highlighted(m); got != top {
+		t.Errorf("after pageChats(1): highlighted = %q, want %q (top of page 2)", got, top)
+	}
+	if m.currentChat != top {
+		t.Errorf("after pageChats(1): currentChat = %q, want %q", m.currentChat, top)
 	}
 
-	m.stepChat(-1)
-	if got := highlighted(m); got != "a" {
-		t.Errorf("after stepChat(-1): highlighted = %q, want %q", got, "a")
+	m.pageChats(-1)
+	if got := m.list.Paginator.Page; got != 0 {
+		t.Errorf("after pageChats(-1): page = %d, want 0", got)
 	}
-	if m.currentChat != "a" {
-		t.Errorf("after stepChat(-1): currentChat = %q, want %q", m.currentChat, "a")
+	if got := highlighted(m); got != "c0" {
+		t.Errorf("after pageChats(-1): highlighted = %q, want %q", got, "c0")
 	}
 }
 
-// Scrolling past either end of the list keeps the current chat rather than
-// wrapping around to the other end.
-func TestStepChatStopsAtEnds(t *testing.T) {
-	m := newChatListModel(t, "a", "a", "b")
-	m.selectChatInList("a")
-	if cmd := m.stepChat(-1); cmd != nil {
-		t.Error("stepChat(-1) at the top returned a command, want nil")
+// Paging past either end keeps the current page and chat rather than wrapping.
+func TestPageChatsStopsAtEnds(t *testing.T) {
+	m, _ := pagedChatListModel(t, 20, 5)
+
+	if cmd := m.pageChats(-1); cmd != nil {
+		t.Error("pageChats(-1) on the first page returned a command, want nil")
 	}
-	if m.currentChat != "a" {
-		t.Errorf("currentChat = %q, want %q (unchanged)", m.currentChat, "a")
+	if m.currentChat != "c0" {
+		t.Errorf("currentChat = %q, want %q (unchanged)", m.currentChat, "c0")
 	}
 
-	m.stepChat(1) // -> b, the last chat
-	if cmd := m.stepChat(1); cmd != nil {
-		t.Error("stepChat(1) at the bottom returned a command, want nil")
+	last := m.list.Paginator.TotalPages - 1
+	for i := 0; i < last; i++ {
+		m.pageChats(1)
 	}
-	if m.currentChat != "b" {
-		t.Errorf("currentChat = %q, want %q (unchanged)", m.currentChat, "b")
+	if got := m.list.Paginator.Page; got != last {
+		t.Fatalf("setup: page = %d, want %d", got, last)
+	}
+	if cmd := m.pageChats(1); cmd != nil {
+		t.Error("pageChats(1) on the last page returned a command, want nil")
+	}
+	if got := m.list.Paginator.Page; got != last {
+		t.Errorf("page = %d, want %d (unchanged)", got, last)
 	}
 }
 
-// stepChat walks the filtered view: with a filter applied, only matching chats
-// are reachable.
-func TestStepChatRespectsFilter(t *testing.T) {
+// pageChats pages the filtered view: only matching chats are reachable.
+func TestPageChatsRespectsFilter(t *testing.T) {
 	m := newChatListModel(t, "alpha", "alpha", "beta", "gamma")
 	m.list.SetFilterText("a")
+	m.list.SetSize(30, m.delegateRows()) // one chat per page
 	m.selectChatInList("alpha")
 
-	m.stepChat(1)
-	if got := highlighted(m); got == "" {
-		t.Fatal("highlight left the filtered view")
-	}
+	m.pageChats(1)
+
 	for _, it := range m.list.VisibleItems() {
 		if c, ok := it.(chatItem); ok && c.chat.ID == m.currentChat {
 			return // landed on a visible (matching) chat
 		}
 	}
 	t.Errorf("currentChat = %q is not in the filtered view", m.currentChat)
+}
+
+// The wheel must not scroll the chat list: every cursor move there opens a
+// chat, so scrolling would be a stream of message loads.
+func TestSidebarWheelDoesNotMoveChatList(t *testing.T) {
+	for _, btn := range []tea.MouseButton{tea.MouseWheelUp, tea.MouseWheelDown} {
+		m, _ := pagedChatListModel(t, 20, 5)
+		m.phase = phaseReady
+
+		got, cmd := m.handleMouseWheel(tea.MouseWheelMsg{X: 5, Y: 3, Button: btn})
+		mm, ok := got.(Model)
+		if !ok {
+			t.Fatalf("handleMouseWheel returned %T, want Model", got)
+		}
+		if cmd != nil {
+			t.Errorf("button %v: returned a command, want nil", btn)
+		}
+		if mm.list.Index() != 0 || mm.currentChat != "c0" {
+			t.Errorf("button %v: index = %d, currentChat = %q, want 0/%q",
+				btn, mm.list.Index(), mm.currentChat, "c0")
+		}
+	}
 }
 
 // Clicking anywhere in the sidebar activates the chats pane, including the

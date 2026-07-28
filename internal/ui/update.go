@@ -527,23 +527,30 @@ func (m Model) handleMouseRelease(msg tea.MouseReleaseMsg) (tea.Model, tea.Cmd) 
 	return m, nil
 }
 
-// handleMouseWheel scrolls whichever pane the pointer is over: the chat list
-// when over the sidebar, otherwise the active conversation viewport. A
-// horizontal wheel (tilt wheel, or a trackpad's sideways swipe) flips through
-// chats from anywhere on screen.
+// handleMouseWheel scrolls the conversation. A horizontal wheel (tilt wheel, or
+// a trackpad's sideways swipe) pages the chat list instead, from anywhere on
+// screen.
+//
+// The wheel deliberately does not scroll the sidebar: every cursor move there
+// has to open the chat it lands on (rebuildChatList re-derives the highlight
+// from currentChat, so a cursor that browsed on its own would snap back at the
+// next poll), which makes free-running wheel scrolling a stream of message
+// loads. Paging is the coarse gesture instead — land on a page, then use the
+// keys or click a row.
 func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	if m.phase != phaseReady {
 		return m, nil
 	}
 	switch msg.Button {
 	case tea.MouseWheelLeft:
-		return m, m.stepChat(-1)
+		return m, m.pageChats(-1)
 	case tea.MouseWheelRight:
-		return m, m.stepChat(1)
+		return m, m.pageChats(1)
 	}
 	if m.withinSidebar(msg.X) {
-		// bubbles' list ignores mouse messages entirely, so move its cursor
-		// here rather than forwarding the message (which did nothing).
+		// bubbles' list ignores mouse messages entirely, so the contacts
+		// cursor is moved here. It has no side effects (picking a person needs
+		// enter), so the wheel may drive it freely.
 		if m.sidebarMode == sidebarContacts {
 			switch msg.Button {
 			case tea.MouseWheelUp:
@@ -551,15 +558,6 @@ func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				m.contacts.CursorDown()
 			}
-			return m, nil
-		}
-		// Over the chat list a wheel notch moves one chat and previews it,
-		// exactly like the up/down keys do.
-		switch msg.Button {
-		case tea.MouseWheelUp:
-			return m, m.stepChat(-1)
-		case tea.MouseWheelDown:
-			return m, m.stepChat(1)
 		}
 		return m, nil
 	}
@@ -575,24 +573,30 @@ func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// stepChat moves the chat-list highlight by delta rows and opens the chat it
-// lands on, previewing it in the messages pane the way the arrow keys do.
-// Focus is deliberately left alone: flipping through chats with the wheel
-// shouldn't yank the keyboard out of the compose box. Returns nil when there
-// is nowhere to move (contacts mode, an empty list, or either end of it).
+// pageChats flips the chat list by delta pages and highlights the chat at the
+// top of the page it lands on, opening it so the messages pane previews it (the
+// highlight can't move on its own — rebuildChatList re-derives it from
+// currentChat on every poll). Focus is left alone: paging with the wheel
+// shouldn't yank the keyboard out of the compose box.
 //
-// The highlight has to move with the conversation because rebuildChatList
-// re-derives it from currentChat on every poll; a cursor that browsed away on
-// its own would snap back at the next refresh.
-func (m *Model) stepChat(delta int) tea.Cmd {
+// Returns nil when there is nowhere to go: contacts mode, or already on the
+// first/last page.
+func (m *Model) pageChats(delta int) tea.Cmd {
 	if m.sidebarMode != sidebarChats {
+		return nil
+	}
+	perPage := m.list.Paginator.PerPage
+	if perPage <= 0 {
+		return nil
+	}
+	page := m.list.Paginator.Page + delta
+	if page < 0 || page >= m.list.Paginator.TotalPages {
 		return nil
 	}
 	// Index/Select address the filtered view, which is what VisibleItems
 	// returns, so both agree while a filter is active.
-	items := m.list.VisibleItems()
-	idx := m.list.Index() + delta
-	if idx < 0 || idx >= len(items) {
+	idx := page * perPage
+	if idx >= len(m.list.VisibleItems()) {
 		return nil
 	}
 	m.list.Select(idx)
